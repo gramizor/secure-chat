@@ -1,84 +1,82 @@
-# Turborepo starter
+**Secure Peer-to-Peer Chat без централизованного хранения данных**
 
-This Turborepo starter is maintained by the Turborepo core team.
+---
 
-## Using this example
+## 🎯 Цель проекта
+Создать защищённый чат:
+- Без серверного хранения сообщений.
+- Без возможности восстановления после выхода.
+- С полной анонимностью и одноразовыми сессиями.
+- Со шифрованием сообщений на клиенте.
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## 🧩 Архитектура проекта
+
+| Компонент | Описание |
+|-----------|----------|
+| **Frontend** (React, Vite, TypeScript) | Реализует P2P-чат, шифрование, QR и PIN-обмен |
+| **Backend** (Node.js + ws) | Только сигналинг для обмена SDP и ICE |
+| **WebRTC** | Устанавливает прямое P2P-соединение между клиентами |
+| **WebSocket** | Канал для обмена сигналами offer/answer/candidate |
+| **AES-GCM** | Клиентское шифрование/дешифрование сообщений |
+| **ServiceWorker (планируется)** | Фоновые уведомления при наличии доверенного соединения |
+
+---
+
+## 🔐 Безопасность и особенности
+- Все сообщения шифруются перед отправкой через WebRTC DataChannel.
+- sessionKey создаётся каждый раз новым:
+  - либо через **QR-код** (отсканировать)
+  - либо через **одноразовый PIN-код** (6 цифр, действителен 90 секунд).
+- sessionKey очищается при выходе или закрытии вкладки.
+- При завершении сессии автоматически рассылается `session-closed` сообщение.
+- После закрытия вкладки:
+  - Невозможно восстановить историю чата.
+  - Устройство забывает ключ.
+- Один аккаунт = одно устройство.
+
+---
+
+## 📈 Технологии
+| Технология     | Где используется |
+|----------------|-------------------|
+| **Vite** + **React** + **TypeScript** | Frontend-приложение |
+| **Node.js** + **WebSocket (ws)** | Мини-сервер сигналинга |
+| **WebRTC** (RTCDataChannel) | Прямое P2P-соединение |
+| **WebCrypto API** | AES-GCM шифрование сообщений |
+| **qrcode.react** | Генерация QR-кодов для обмена ключами |
+
+---
+
+## 🔄 Основной поток действий пользователя
+
+1. Первый пользователь нажимает «Создать сессию».
+2. Генерируется QR-код **или** PIN-код (на выбор).
+3. Второй пользователь сканирует QR или вводит PIN вручную.
+4. WebRTC устанавливает защищённое P2P-соединение.
+5. Все сообщения шифруются через сессионный AES-ключ.
+6. При завершении чата ➔ ключ удаляется у обоих клиентов.
+
+---
+
+## 🧠 Общая схема работы:
+
+```plaintext
+[User A] ---(PIN или QR)---> [User B]
+  |                           |
+ [Frontend]---(WebSocket)--->[Server (сигналинг)]---(WebSocket)--->[Frontend]
+  |                           |
+(offer/answer/ice)         (offer/answer/ice)
+
+[P2P WebRTC DataChannel]
+  ↳ AES-шифрованные сообщения
 ```
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-pnpm build
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-pnpm dev
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-npx turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-npx turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.com/docs/core-concepts/monorepos/running-tasks)
-- [Caching](https://turborepo.com/docs/core-concepts/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/core-concepts/monorepos/filtering)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+# 📚 Выводы:
+- Система минимизирует риск утечки данных даже при компрометации каналов связи.
+- Исключение централизованного хранения минимизирует векторы атак.
+- Одноразовые ключи и сессии обеспечивают forward secrecy на уровне пользовательских данных.
+- Реализация на чистом фронтенде делает приложение лёгким и легко встраиваемым.
