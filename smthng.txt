@@ -1,0 +1,9 @@
+p2p-chat/
+├── apps/
+│   ├── client/         # React + TS
+│   └── server/         # Node.js (сигналинг)
+├── packages/
+│   └── shared/         # Общие типы, утилы, crypto
+├── tsconfig.base.json
+├── package.json
+├── README.md
