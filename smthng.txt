@@ -7,3 +7,15 @@ p2p-chat/
 ├── tsconfig.base.json
 ├── package.json
 ├── README.md
+
+
+apps/client/
+├── src/
+│   ├── app/              # Точка входа
+│   ├── pages/            # Страницы
+│   ├── widgets/          # Компоненты
+│   └── shared/           # WS, RTC, crypto
+├── index.html
+tsconfig.json
+vite.config.ts
+package.json
