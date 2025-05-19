@@ -1,79 +1,111 @@
-import { useEffect, useState } from "react";
-import { v4 as uuid } from "uuid";
-import { RTCPeer } from "@/shared/api/rtc/RTCPeer";
-import { WebSocketClient } from "@/shared/api/ws/WebSocketClient";
-import { generateKeyPair } from "@/shared/crypto/ecdh";
-import { generatePin } from "@/shared/lib/generatePin";
-import { QRCodeBox } from "@/widgets/qr/QRCodeBox";
+import {useEffect, useState} from "react"
+import {v4 as uuid} from "uuid"
+import {RTCPeer} from "@/shared/api/rtc/RTCPeer"
+import {WebSocketClient} from "@/shared/api/ws/WebSocketClient"
+import {generateKeyPair} from "@/shared/crypto/ecdh"
+import {generatePin} from "@/shared/lib/generatePin"
+import {QRCodeBox} from "@/widgets/qr/QRCodeBox"
+import {ChatBox} from "@/widgets/chat/ChatBox"
 
-const peerId = uuid();
+const peerId = uuid()
 
 export const HomePage = () => {
-  const [pin, setPin] = useState("");
-  const [url, setUrl] = useState("");
-  const [peer, setPeer] = useState<RTCPeer | null>(null);
-  const [ws, setWs] = useState<WebSocketClient | null>(null);
+    const [pin, setPin] = useState("")
+    const [url, setUrl] = useState("")
+    const [peer, setPeer] = useState<RTCPeer | null>(null)
+    const [ws, setWs] = useState<WebSocketClient | null>(null)
+    const [wsReady, setWsReady] = useState(false)
 
-  useEffect(() => {
-    const socket = new WebSocketClient(peerId);
-    socket.onMessage((msg) => {
-      if (msg.type === "answer") {
-        peer?.acceptAnswer(msg.data.sdp);
-        console.log("✅ Answer принят, соединение установлено");
+    useEffect(() => {
+        const socket = new WebSocketClient(peerId)
+        setWs(socket)
 
-        // после использования сбросить
-        setPin("");
-        setUrl("");
-        setPeer(null);
+        socket.onOpen(() => {
+            console.log("🟢 WebSocket открыт")
+            setWsReady(true)
+        })
 
-        // (опционально) сгенерировать новый
-        // generateInvitation()
-      }
-    });
-    setWs(socket);
-    return () => socket.close();
-  }, []);
+        socket.onMessage(async (msg) => {
+            if (msg.type === "answer") {
+                if (!peer) {
+                    console.warn("❌ Пришёл answer до инициализации peer")
+                    return
+                }
 
-  const generateInvitation = async () => {
-    if (!ws) return;
+                await peer.acceptAnswer(msg.data.sdp)
+                console.log("✅ Answer принят, соединение установлено")
 
-    const p = generatePin();
-    setPin(p);
+                setPin("")
+                setUrl("")
+            }
+        })
 
-    const rtc = new RTCPeer();
-    const { publicKey } = generateKeyPair();
-    setPeer(rtc);
+        return () => {
+            socket.close()
+        }
+    }, [])
 
-    const offer = await rtc.createOffer();
+    const generateInvitation = async () => {
+        if (!ws) return;
 
-    ws.send({
-      type: "register-offer",
-      from: peerId,
-      data: {
-        pin: p,
-        peerId,
-        sdp: JSON.parse(offer),
-        publicKey,
-      },
-    });
+        const p = generatePin();
+        setPin(p);
 
-    setUrl(`${window.location.origin}/join?pin=${p}`);
-  };
+        const rtc = new RTCPeer();
+        const {publicKey} = generateKeyPair();
+        const offer = await rtc.createOffer();
+        setPeer(rtc);
 
-  return (
-    <div>
-      <h2>👤 Peer ID: {peerId.slice(0, 8)}</h2>
-      <button onClick={generateInvitation}>Создать QR + PIN</button>
+        console.log("📤 Ожидаем открытие WebSocket перед отправкой register-offer...");
 
-      {pin && (
-        <>
-          <p>
-            🔐 PIN: <b>{pin}</b>
-          </p>
-          <QRCodeBox data={url} />
-          <p style={{ fontSize: 12 }}>{url}</p>
-        </>
-      )}
-    </div>
-  );
-};
+        if (ws.isOpen) {
+            ws.send({
+                type: "register-offer",
+                from: peerId,
+                data: {
+                    pin: p,
+                    peerId,
+                    sdp: offer,
+                    pubKey: publicKey
+                }
+            });
+
+            setUrl(`${window.location.origin}/join?pin=${p}`);
+        } else {
+            ws.onOpen(() => {
+                ws.send({
+                    type: "register-offer",
+                    from: peerId,
+                    data: {
+                        pin: p,
+                        peerId,
+                        sdp: offer,
+                        pubKey: publicKey
+                    }
+                });
+
+                setUrl(`${window.location.origin}/join?pin=${p}`);
+            });
+        }
+    };
+
+    return (
+        <div>
+            <h2>👤 Peer ID: {peerId.slice(0, 8)}</h2>
+
+            <button onClick={generateInvitation} disabled={!wsReady}>
+                {wsReady ? "Создать QR + PIN" : "Подключение..."}
+            </button>
+
+            {pin && (
+                <>
+                    <p>🔐 PIN: <b>{pin}</b></p>
+                    <QRCodeBox data={url}/>
+                    <p style={{fontSize: 12}}>{url}</p>
+                </>
+            )}
+
+            {peer && <ChatBox peer={peer}/>}
+        </div>
+    )
+}

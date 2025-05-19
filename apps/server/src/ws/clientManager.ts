@@ -1,4 +1,4 @@
-import { WebSocket } from 'ws'
+import {WebSocket} from 'ws'
 
 type ClientId = string
 type Pin = string
@@ -19,6 +19,7 @@ export const ClientManager = {
         for (const peers of connections.values()) {
             peers.delete(id)
         }
+        console.log(`🔌 Клиент ${id} отключился`)
     },
 
     addConnection(a: ClientId, b: ClientId) {
@@ -48,13 +49,20 @@ export const ClientManager = {
 }
 
 export const OfferRegistry = {
-    register(pin: Pin, peerId: string, sdp: any, pubKey: string) {
-        offerRegistry.set(pin, { peerId, sdp, pubKey })
+    register(pin: Pin, peerId: string, sdp: RTCSessionDescriptionInit, pubKey: string) {
+        if (offerRegistry.has(pin)) {
+            console.warn(`⚠️ PIN ${pin} уже зарегистрирован — перезаписываем`)
+        }
+        console.log("📥 REGISTER PIN:", pin)
+        offerRegistry.set(pin, {peerId, sdp, pubKey})
     },
 
     consume(pin: Pin) {
+        console.log("📤 CONSUME PIN:", pin)
         const data = offerRegistry.get(pin)
-        if (data) offerRegistry.delete(pin)
+        if (data) {
+            offerRegistry.delete(pin)
+        }
         return data
     }
 }
