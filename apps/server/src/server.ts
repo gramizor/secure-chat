@@ -1,3 +1,0 @@
-import { createWSServer } from './ws'
-
-createWSServer(3001)

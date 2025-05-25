@@ -1,8 +1,0 @@
-export type SignalMessage =
-    | { type: 'join'; id: string }
-    | { type: 'offer' | 'answer' | 'ice-candidate'; from: string; to: string; data: any }
-    | { type: 'leave'; from: string }
-    | { type: 'get-peers'; from: string }
-    | { type: 'peers'; to: string; peers: string[] }
-    | { type: 'check-online'; from: string; to: string }
-    | { type: 'online-status'; to: string; peer: string; online: boolean }

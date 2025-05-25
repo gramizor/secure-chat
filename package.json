@@ -1,15 +1,14 @@
 {
-  "name": "p2p-chat",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "name": "some",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/react-router-dom": "^5.3.3",
-    "eslint": "^9.27.0",
-    "prettier": "^3.5.3",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
-  }
+    "typescript": "^5.5.3"
+  },
+  "private": true
 }
