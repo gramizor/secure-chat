@@ -25,9 +25,9 @@ export class RTCPeer {
                 this.channel.onopen = () => {
                     console.log('✅ remote DataChannel opened')
                     this.onOpenCallback?.()
+                    this.monitorState()
                 }
                 this.setupChannel()
-                this.monitorState()
             }
         }
 
@@ -112,11 +112,11 @@ export class RTCPeer {
     }
 
     private monitorState() {
-        if (!this.channel) return
         if (this.monitorInterval) clearInterval(this.monitorInterval)
-
         this.monitorInterval = setInterval(() => {
-            console.log('📡 channel readyState:', this.channel?.readyState)
+            if (this.channel?.readyState === 'open') {
+                console.log('📡 channel readyState:', this.channel?.readyState)
+            }
         }, 1000)
     }
 }
