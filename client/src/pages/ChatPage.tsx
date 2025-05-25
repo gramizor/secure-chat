@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
 import {v4 as uuid} from 'uuid'
-import {RTCPeer} from './RTCPeer'
-import {WebSocketClient} from './WebSocketClient'
+import {WebSocketClient} from "@shared/api/WebSocketClient.ts";
+import {RTCPeer} from "@shared/api/RTCPeer.ts";
 
 const ChatPage = () => {
     const [peerId] = useState(uuid())
