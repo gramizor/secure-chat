@@ -17,6 +17,9 @@ export class RTCPeer {
     private publicKey: string | null = null;
     private pendingCandidates: RTCIceCandidate[] = [];
     private onCloseCallback: (() => void) | null = null;
+    private lastPongTimestamp: number = Date.now();
+    private pingInterval: ReturnType<typeof setInterval> | null = null;
+
 
     constructor(isInitiator: boolean) {
         this.isInitiator = isInitiator;
@@ -139,14 +142,28 @@ export class RTCPeer {
 
         this.channel.onmessage = async (e) => {
             try {
-                console.log('📨 получено сообщение:', e.data);
-                const {cipher, iv} = JSON.parse(e.data);
+                const data = JSON.parse(e.data);
+
+                if (data.type === 'ping') {
+                    console.log('⌛ ping sended');
+                    this.channel?.send(JSON.stringify({ type: 'pong' }));
+                    return;
+                }
+
+                if (data.type === 'pong') {
+                    console.log('✅ pong received');
+                    this.lastPongTimestamp = Date.now();
+                    return;
+                }
+
+                const {cipher, iv} = data;
                 const msg = await this.secure!.decryptMessage(cipher, iv);
                 for (const l of this.listeners) l(msg);
             } catch (err) {
-                console.error('❌ ошибка расшифровки сообщения:', err);
+                console.error('❌ ошибка в onmessage:', err);
             }
         };
+
 
         this.channel.onerror = (err) => {
             console.error('❌ DataChannel error:', err);
@@ -163,6 +180,23 @@ export class RTCPeer {
             if (this.channel?.readyState === 'open') {
                 console.log('📡 channel readyState:', this.channel?.readyState);
             }
-        }, 1000);
+        }, 10000);
+
+        this.pingInterval = setInterval(() => {
+            if (this.channel?.readyState === 'open') {
+                try {
+                    this.channel.send(JSON.stringify({ type: 'ping' }));
+                } catch {
+                    console.warn('❌ ошибка при отправке ping');
+                }
+
+                if (Date.now() - this.lastPongTimestamp > 15000) {
+                    console.log("🛑 pong не получен — считаем соединение разорванным");
+                    this.close();
+                    this.onCloseCallback?.();
+                }
+            }
+        }, 10000);
+
     }
 }
