@@ -15,7 +15,7 @@ export const Layout = ({header, sidebar, main}: { header: ReactNode, sidebar: Re
                     display: "flex",
                     flexDirection: "column",
                     backgroundColor: '#7c0000',
-                    padding: '1rem',
+                    padding: '0 1rem 1rem',
                     minHeight: 0,
                     overflow: 'hidden',
                     width: "100%"

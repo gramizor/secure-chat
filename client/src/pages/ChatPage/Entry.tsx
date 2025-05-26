@@ -169,7 +169,7 @@ export const EntryPage = () => {
                             <CustomButton
                                 style={{marginTop: '1rem'}}
                                 onClick={startAsHost}
-                                disabled={!targetId.trim()}
+                                isDisabled={!targetId.trim()}
                             >
                                 🚀 Начать соединение
                             </CustomButton>
@@ -185,29 +185,35 @@ export const EntryPage = () => {
                     }}>
                         <div
                             style={{
-                                flex: 1,
-                                overflowY: "auto",
-                                display: "flex",
-                                flexDirection: "column",
-                                justifyContent: "flex-end",
                                 paddingBottom: "1rem",
                             }}
                         >
-                            {log.map((entry, i) => {
-                                const isMine = entry.startsWith("🧍");
-                                const text = isMine ? entry.slice(2) : entry;
+                            {log.length === 0 ? (
+                                <div style={{
+                                    color: "#aaa",
+                                    fontSize: "1rem",
+                                    margin: "auto",
+                                    textAlign: "center"
+                                }}>
+                                    {status === 'connecting' ? 'Устанавливаем соединение...' : status === 'connected' ? 'Начните общаться!' : 'Здесь будут сообщения'}
+                                </div>
+                            ) : (
+                                <>
+                                    {log.map((entry, i) => {
+                                        const isMine = entry.startsWith("🧍");
+                                        const text = isMine ? entry.slice(2) : entry;
 
-                                return (
-                                    <div
-                                        key={i}
-                                        style={{
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            alignItems: isMine ? "flex-end" : "flex-start",
-                                            maxWidth: 500,
-                                            marginBottom: "0.5rem",
-                                        }}
-                                    >
+                                        return (
+                                            <div
+                                                key={i}
+                                                style={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    alignItems: isMine ? "flex-end" : "flex-start",
+                                                    maxWidth: 500,
+                                                    marginBottom: "0.5rem",
+                                                }}
+                                            >
             <span
                 style={{
                     fontSize: "0.75rem",
@@ -217,22 +223,24 @@ export const EntryPage = () => {
             >
                 {isMine ? "Вы:" : "Собеседник:"}
             </span>
-                                        <div
-                                            style={{
-                                                background: "white",
-                                                color: "black",
-                                                padding: "0.5rem 1rem",
-                                                borderRadius: "12px",
-                                                wordBreak: "break-word",
-                                            }}
-                                        >
-                                            {text}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                                <div
+                                                    style={{
+                                                        background: "white",
+                                                        color: "black",
+                                                        padding: "0.5rem 1rem",
+                                                        borderRadius: "12px",
+                                                        wordBreak: "break-word",
+                                                    }}
+                                                >
+                                                    {text}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
 
-                            <div ref={endRef}/>
+                                    <div ref={endRef}/>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -250,7 +258,7 @@ export const EntryPage = () => {
                         />
                         <CustomButton
                             onClick={() => send(input, status, () => setInput(""))}
-                            disabled={status !== "connected"}
+                            isDisabled={status !== "connected"}
                         >
                             Отправить
                         </CustomButton>

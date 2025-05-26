@@ -24,7 +24,7 @@ export const CustomButton = ({
             color: textColor,
             borderRadius: 8,
             border: 'none',
-            cursor: isDisabled ? 'default' : 'pointer',
+            cursor: isDisabled ? 'not-allowed' : 'pointer',
             ...style
         }}
     >

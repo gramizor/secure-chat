@@ -1,4 +1,4 @@
-import { isPending } from "@shared/lib/pendingManager";
+import {isPending} from "@shared/lib/pendingManager";
 import {CustomButton} from "@shared/ui/Button/Button.tsx";
 
 interface Chat {
@@ -37,15 +37,15 @@ export const Sidebar = ({
             }}
         >
             {/* Верхние кнопки */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{display: "flex", flexDirection: "column", gap: "0.5rem"}}>
                 <CustomButton
-                    style={{ backgroundColor: "#660000", color: "white", padding: "0.5rem" }}
+                    style={{backgroundColor: "#660000", color: "white", padding: "0.5rem"}}
                     onClick={() => setMode("host")}
                 >
                     🔗 Создать соединение
                 </CustomButton>
                 <CustomButton
-                    style={{ backgroundColor: "#660000", color: "white", padding: "0.5rem" }}
+                    style={{backgroundColor: "#660000", color: "white", padding: "0.5rem"}}
                     onClick={() => setMode("join")}
                 >
                     🔌 Подключиться по PIN
@@ -53,8 +53,8 @@ export const Sidebar = ({
             </div>
 
             {/* История чатов */}
-            <div style={{ flex: 1, overflowY: "auto", margin: "1rem 0" }}>
-                <h3>История чатов</h3>
+            <div style={{flex: 1, overflowY: "auto", margin: "1rem 0"}}>
+                <h3 style={{marginBottom: '7px'}}>История чатов</h3>
                 <ul
                     style={{
                         listStyle: "none",
@@ -79,14 +79,13 @@ export const Sidebar = ({
                                 }}
                             >
                                 <CustomButton
-                                    disabled={isDisabled}
+                                    isDisabled={isDisabled}
                                     style={{
                                         width: "100%",
                                         backgroundColor: pending ? "#4a0000" : "#990000",
                                         color: "white",
                                         padding: "0.5rem",
                                         borderRadius: "6px",
-                                        cursor: isDisabled ? "not-allowed" : "pointer",
                                     }}
                                     onClick={() => reconnect(chat.uuid)}
                                     title={pending ? "Ожидает ответа" : undefined}
@@ -100,7 +99,7 @@ export const Sidebar = ({
             </div>
 
             {/* Нижние кнопки */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{display: "flex", flexDirection: "column", gap: "0.5rem"}}>
                 <CustomButton
                     style={{
                         backgroundColor: "#990000",
