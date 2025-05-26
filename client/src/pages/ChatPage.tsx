@@ -5,6 +5,7 @@ import {RTCPeer} from "@shared/api/RTCPeer";
 import {generatePin} from "@shared/lib/generatePin";
 import {connectionExists, getConnectionHistory, saveConnectionHistory} from "@shared/lib/db";
 import {getOrGenerateUUID} from "@shared/lib/generateUUID";
+import {addPending, clearPending, isPending} from '@shared/lib/pendingManager'
 
 const ChatPage = () => {
     const uuid = getOrGenerateUUID();
@@ -25,12 +26,18 @@ const ChatPage = () => {
     useEffect(() => {
         const ws = new WebSocketClient(uuid, mode === 'join' ? pin : undefined);
         wsRef.current = ws;
-        console.log('[ChatPage] WebSocket создан:', { uuid, pin, mode });
+        console.log('[ChatPage] WebSocket создан:', {uuid, pin, mode});
 
         ws.onMessage(async msg => {
             console.log('[WS] получено сообщение:', msg);
             switch (msg.type) {
                 case 'offer': {
+                    if (status === 'connected') {
+                        addPending(msg.from);
+                        addLog(`📥 входящий offer от ${msg.from} сохранён`);
+                        return;
+                    }
+
                     addLog(`📩 offer от ${msg.from}`);
                     peer.current = new RTCPeer(false);
                     addLog('[RTC] создан peer (receiver)');
@@ -40,25 +47,38 @@ const ChatPage = () => {
                         setStatus('connected');
                         addLog('🔗 канал открыт');
                         clearPinTimer();
+                        clearPending(msg.from);
 
-                        const alreadySaved = await connectionExists(msg.uuid);
+                        const remoteUuid = msg.uuid ?? msg.from;
+                        const alreadySaved = await connectionExists(remoteUuid);
                         if (!alreadySaved) {
                             const name = prompt("Введите имя чата") ?? "Без имени";
-                            saveConnectionHistory(msg.uuid, name);
-                            addLog(`[DB] сохранена история с uuid ${msg.uuid}`);
+                            saveConnectionHistory(remoteUuid, name);
                         }
                     });
-                    peer.current.onIceCandidate(c => ws.send({type: 'ice-candidate', to: msg.from, data: {candidate: c}}));
+
+                    peer.current.onIceCandidate(c => wsRef.current?.send({
+                        type: 'ice-candidate',
+                        to: msg.from,
+                        data: {candidate: c}
+                    }));
 
                     const answer = await peer.current.acceptOffer(msg.data.sdp);
                     addLog('[RTC] answer создан');
-                    ws.send({type: 'answer', to: msg.from, data: {sdp: answer}});
+                    wsRef.current?.send({type: 'answer', to: msg.from, data: {sdp: answer}});
                     break;
                 }
                 case 'answer': {
                     addLog(`📩 answer от ${msg.from}`);
                     await peer.current?.acceptAnswer(msg.data.sdp);
                     addLog('[RTC] answer принят (host)');
+
+                    const alreadySaved = await connectionExists(msg.from);
+                    if (!alreadySaved) {
+                        const name = prompt("Введите имя чата") ?? "Без имени";
+                        saveConnectionHistory(msg.from, name);
+                        addLog(`[DB] сохранена история с uuid ${msg.from}`);
+                    }
                     break;
                 }
                 case 'ice-candidate': {
@@ -110,9 +130,12 @@ const ChatPage = () => {
             peer.current.onOpen(() => {
                 setStatus('connected');
                 addLog('🔗 канал открыт');
-                saveConnectionHistory(targetId, prompt("Название чата:") ?? "Без названия");
             });
-            peer.current.onIceCandidate(c => wsRef.current?.send({type: 'ice-candidate', to: targetId, data: {candidate: c}}));
+            peer.current.onIceCandidate(c => wsRef.current?.send({
+                type: 'ice-candidate',
+                to: targetId,
+                data: {candidate: c}
+            }));
 
             const offer = await peer.current.createOffer();
             addLog('[RTC] offer создан (host)');
@@ -133,26 +156,35 @@ const ChatPage = () => {
         console.log('[DB] история загружена:', history);
     };
 
-    const handleReconnect = async (uuid: string) => {
+    const handleReconnect = async (peerUuid: string) => {
+        setMode('host');
         setStatus('connecting');
-        addLog(`🔁 подключение к ${uuid.slice(0, 6)}`);
+        addLog(`🔁 подключение к ${peerUuid.slice(0, 6)}`);
+
+        peer.current?.close();
+        wsRef.current?.close();
 
         const ws = new WebSocketClient(uuid);
         wsRef.current = ws;
 
-        const rtc = new RTCPeer(true);
-        peer.current = rtc;
+        ws.onOpen(async () => {
+            const rtc = new RTCPeer(true);
+            peer.current = rtc;
 
-        rtc.onMessage(m => addLog(`👤 ${m}`));
-        rtc.onOpen(() => {
-            setStatus('connected');
-            addLog('🔗 канал открыт');
+            rtc.onMessage(m => addLog(`👤 ${m}`));
+            rtc.onOpen(() => {
+                setStatus('connected');
+                addLog('🔗 канал открыт');
+            });
+            rtc.onIceCandidate(c => {
+                ws.send({type: 'ice-candidate', to: peerUuid, data: {candidate: c}});
+            });
+
+            const offer = await rtc.createOffer();
+            ws.send({type: 'offer', to: peerUuid, data: {sdp: offer}});
         });
-        rtc.onIceCandidate(c => ws.send({type: 'ice-candidate', to: uuid, data: {candidate: c}}));
-
-        const offer = await rtc.createOffer();
-        ws.send({type: 'offer', to: uuid, data: {sdp: offer}});
     };
+
 
     useEffect(() => {
         loadChatHistory();
@@ -208,7 +240,9 @@ const ChatPage = () => {
             <ul>
                 {chatHistory.map((chat, index) => (
                     <li key={index}>
-                        <button onClick={() => handleReconnect(chat.uuid)}>{chat.chatName}</button>
+                        <button onClick={() => handleReconnect(chat.uuid)}>
+                            {chat.chatName} {isPending(chat.uuid) ? '❗' : ''}
+                        </button>
                     </li>
                 ))}
             </ul>
