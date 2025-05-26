@@ -69,6 +69,16 @@ const ChatPage = () => {
                         data: {candidate: c}
                     }));
 
+                    peer.current.onClose?.(() => {
+                        addLog('🚫 соединение прервано — по ошибке канала');
+                        peer.current?.close();
+                        wsRef.current?.close(1000, 'datachannel error');
+                        setConnectedPeerId(null);
+                        setStatus('idle');
+                        setMode('idle');
+                        setLog([]);
+                    });
+
                     const answer = await peer.current.acceptOffer(msg.data.sdp, msg.data.publicKey);
                     addLog('[RTC] answer создан');
                     // const publicKey = peer.current?.getPublicKey();
@@ -236,10 +246,9 @@ const ChatPage = () => {
                 setStatus('idle');
                 setMode('idle');
                 setConnectedPeerId(null);
-            }, 5000);
+            }, 7000);
         });
     };
-
 
     useEffect(() => {
         loadChatHistory();
@@ -259,17 +268,19 @@ const ChatPage = () => {
                     onClick={async () => {
                         if (connectedPeerId && wsRef.current?.getSocketReadyState() === WebSocket.OPEN) {
                             wsRef.current.send({type: 'disconnect', to: connectedPeerId});
-                            await new Promise(resolve => setTimeout(resolve, 100));
+                            // ждём, чтобы сообщение успело дойти
+                            await new Promise(res => setTimeout(res, 200));
                         }
 
                         peer.current?.close();
                         peer.current = null;
-                        wsRef.current?.close(1000, 'кнопка завершить чат');
-                        wsRef.current = null;
                         setConnectedPeerId(null);
                         setStatus('idle');
                         setMode('idle');
                         setLog([]);
+
+                        wsRef.current?.close(1000, 'кнопка завершить чат');
+                        wsRef.current = null;
                     }}
                 >
                     🔌 Завершить чат

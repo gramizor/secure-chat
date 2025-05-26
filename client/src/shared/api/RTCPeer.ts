@@ -18,6 +18,7 @@ export class RTCPeer {
     private secure: SecureChannel | null = null;
     private publicKey: string | null = null;
     private pendingCandidates: RTCIceCandidate[] = [];
+    private onCloseCallback: (() => void) | null = null;
 
     constructor(isInitiator: boolean) {
         this.isInitiator = isInitiator;
@@ -136,6 +137,10 @@ export class RTCPeer {
         this.peer.close();
     }
 
+    onClose(cb: () => void) {
+        this.onCloseCallback = cb;
+    }
+
     private setupChannel() {
         if (!this.channel) return;
 
@@ -152,6 +157,10 @@ export class RTCPeer {
 
         this.channel.onerror = (err) => {
             console.error('❌ DataChannel error:', err);
+            this.close();
+            this.onOpenCallback = null;
+            this.iceCallback = null;
+            this.listeners.clear();
         };
     }
 
