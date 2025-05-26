@@ -1,19 +1,20 @@
-// pages/ChatPage/Header.tsx
-
-export const Header = () => {
-    return (
-        <header style={{
-            backgroundColor: 'black',
-            color: 'white',
-            padding: '1rem',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-        }}>
-            <h1 style={{margin: 0}}>Secure chat</h1>
-            <div style={{display: 'flex', gap: '0.5rem'}}>
-                <img src="/logo.png" alt="logo" width="50" height="50"/>
-            </div>
-        </header>
-    );
-};
+export const Header = () => (
+  <div
+    style={{
+      height: "70px",
+      width: "100%",
+      overflow: "hidden",
+      backgroundImage: "url('/gr-secure.png')",
+      backgroundRepeat: "repeat-x",
+      backgroundSize: "auto 100%",
+      animation: "scroll-bg 50s linear infinite",
+    }}
+  >
+    <style>{`
+      @keyframes scroll-bg {
+        from { background-position: 0 0; }
+        to { background-position: 100% 0; }
+      }
+    `}</style>
+  </div>
+);

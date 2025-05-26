@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { generatePin } from "@shared/lib/generatePin";
 
-export const usePinTimer = (mode: 'idle' | 'host' | 'join') => {
+export const usePinTimer = (mode: "idle" | "host" | "join") => {
   const [pin, setPin] = useState(generatePin());
   const pinTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (mode !== 'join') return;
+    if (mode !== "join") return;
 
     const interval = setInterval(() => {
       const newPin = generatePin();
       setPin(newPin);
-      console.log('[Pin] обновлён:', newPin);
+      console.log("[Pin] обновлён:", newPin);
     }, 60000);
 
     pinTimerRef.current = interval;
@@ -22,7 +22,7 @@ export const usePinTimer = (mode: 'idle' | 'host' | 'join') => {
     if (pinTimerRef.current) {
       clearInterval(pinTimerRef.current);
       pinTimerRef.current = null;
-      console.log('[Pin] таймер остановлен — соединение установлено');
+      console.log("[Pin] таймер остановлен — соединение установлено");
     }
   };
 

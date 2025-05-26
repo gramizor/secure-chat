@@ -1,10 +1,10 @@
-import { v4 as uuidNew } from 'uuid';
+import { v4 as uuidNew } from "uuid";
 
 export function getOrGenerateUUID(): string {
-    let uuid = localStorage.getItem('uuid');
-    if (!uuid) {
-        uuid = uuidNew(); // 👈 важно: вызвать функцию
-        localStorage.setItem('uuid', uuid); // 👈 сохраняется строка
-    }
-    return uuid;
+  let uuid = localStorage.getItem("uuid");
+  if (!uuid) {
+    uuid = uuidNew();
+    localStorage.setItem("uuid", uuid);
+  }
+  return uuid;
 }

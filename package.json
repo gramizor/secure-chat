@@ -4,10 +4,11 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "format": "prettier --write ."
   },
-  "dependencies": {},
   "devDependencies": {
+    "prettier": "^3.5.3",
     "typescript": "^5.5.3"
   },
   "private": true
