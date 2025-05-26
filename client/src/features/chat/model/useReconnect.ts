@@ -2,7 +2,6 @@ import {useCallback} from "react";
 import {RTCPeer} from "@shared/api/RTCPeer";
 import {WebSocketClient} from "@shared/api/WebSocketClient";
 import {clearPending} from "@shared/lib/pendingManager";
-import {bindConnectionWatchers} from "@shared/lib/resetConnection";
 
 export const useReconnect = ({
                                  uuid,
@@ -15,8 +14,7 @@ export const useReconnect = ({
                                  setMode,
                                  addLog,
                                  setLog,
-                                 isReconnecting,
-                                 bumpConnectionVersion
+                                 isReconnecting
                              }: {
     uuid: string;
     wsRef: React.MutableRefObject<WebSocketClient | null>;
@@ -28,8 +26,7 @@ export const useReconnect = ({
     setMode: (mode: "idle" | "host" | "join") => void;
     addLog: (msg: string, system: boolean) => void;
     setLog: (logs: string[]) => void;
-    isReconnecting: React.RefObject<boolean>;
-    bumpConnectionVersion: () => void;
+    isReconnecting: React.RefObject<boolean>
 }) => {
     return useCallback(async (peerUuid: string) => {
         if (status === "connected") {
@@ -41,7 +38,15 @@ export const useReconnect = ({
                 addLog(`📤 отправлен disconnect для ${connectedPeerId}`, true);
             }
 
-            bumpConnectionVersion();
+            peer.current?.close();
+            peer.current = null;
+            wsRef.current?.close(1000, "reconnect");
+            wsRef.current = null;
+
+            setConnectedPeerId(null);
+            setStatus("idle");
+            setMode("idle");
+            setLog([]);
         }
 
         isReconnecting.current = true;
@@ -70,15 +75,22 @@ export const useReconnect = ({
                 ws.send({type: "ice-candidate", to: peerUuid, data: {candidate: c}});
             });
 
-            bindConnectionWatchers(rtc, ws, {
-                wsRef,
-                peerRef: peer,
-                setConnectedPeerId,
-                setStatus,
-                setMode,
-                setLog,
-                connectedPeerId: peerUuid,
-                bumpConnectionVersion
+            rtc.onClose(() => {
+                addLog("🚫 соединение закрыто", true);
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
+                peer.current = null;
+            });
+
+            ws.onClose(() => {
+                addLog("📴 WebSocket отключен", true);
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
+                wsRef.current = null;
             });
 
             const {sdp, publicKey} = await rtc.createOffer();
@@ -86,8 +98,16 @@ export const useReconnect = ({
             addLog("⏳ offer отправлен — ждём ответ 6 сек...", true);
 
             timeoutId = setTimeout(() => {
-                bumpConnectionVersion();
+                addLog("⌛ истекло время ожидания ответа — отмена подключения", true);
+                peer.current?.close();
+                peer.current = null;
+                wsRef.current?.close(1000, "timeout");
+                wsRef.current = null;
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
             }, 7000);
         });
-    }, [uuid, wsRef, peer, status, connectedPeerId, setConnectedPeerId, setStatus, setMode, addLog, setLog, bumpConnectionVersion]);
+    }, [uuid, wsRef, peer, status, connectedPeerId, setConnectedPeerId, setStatus, setMode, addLog, setLog]);
 };

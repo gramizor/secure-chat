@@ -2,7 +2,6 @@ import {RTCPeer} from "@shared/api/RTCPeer";
 import {WebSocketClient} from "@shared/api/WebSocketClient";
 import {connectionExists, saveConnectionHistory} from "@shared/lib/db";
 import {addPending, clearPending} from "@shared/lib/pendingManager";
-import {bindConnectionWatchers} from "@shared/lib/resetConnection";
 
 interface HandleMessageParams {
     msg: any;
@@ -17,8 +16,6 @@ interface HandleMessageParams {
     addLog: (txt: string, system: boolean) => void;
     clearPinTimer: () => void;
     loadChatHistory: () => void;
-    bumpConnectionVersion?: () => void;
-    connectedPeerId?: string | null;
 }
 
 export const handleMessage = ({
@@ -34,13 +31,15 @@ export const handleMessage = ({
                                   addLog,
                                   clearPinTimer,
                                   loadChatHistory,
-                                  bumpConnectionVersion,
                               }: HandleMessageParams) => {
     switch (msg.type) {
         case "offer": {
             if (status === "connected" || peer.current || wsRef.current?.getSocketReadyState() !== 1) {
                 if (msg.from !== selfId) {
                     addPending(msg.from);
+                    console.log('current status:', status)
+                    console.log('peer.current:', peer.current)
+                    console.log('wsRef.current?.getSocketReadyState():', wsRef.current?.getSocketReadyState())
                     addLog(`📥 уже есть соединение, входящий offer от ${msg.from} сохранён в pending`, true);
                 } else {
                     addLog(`⚠️ повторный offer от текущего peer ${msg.from} — игнор`, true);
@@ -68,21 +67,28 @@ export const handleMessage = ({
                 }
             });
 
-            peer.current.onIceCandidate((c) => wsRef.current?.send({
-                type: "ice-candidate",
-                to: msg.from,
-                data: {candidate: c}
-            }));
+            peer.current.onIceCandidate((c) => {
+                wsRef.current?.send({
+                    type: "ice-candidate", to: msg.from, data: {candidate: c}
+                });
+            });
 
-            bindConnectionWatchers(peer.current, wsRef.current!, {
-                wsRef,
-                peerRef: peer,
-                setConnectedPeerId,
-                setStatus,
-                setMode,
-                setLog,
-                connectedPeerId: msg.from,
-                bumpConnectionVersion,
+            peer.current.onClose(() => {
+                addLog("🚫 соединение закрыто", true);
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
+                peer.current = null;
+            });
+
+            wsRef.current?.onClose(() => {
+                addLog("📴 WebSocket отключен", true);
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
+                wsRef.current = null;
             });
 
             peer.current.acceptOffer(msg.data.sdp, msg.data.publicKey).then((answer) => {
@@ -113,7 +119,13 @@ export const handleMessage = ({
         }
 
         case "disconnect": {
-            bumpConnectionVersion?.();
+            addLog("🧯 пришёл disconnect", true);
+            setConnectedPeerId(null);
+            setStatus("idle");
+            setMode("idle");
+            setLog([]);
+            peer.current?.close();
+            peer.current = null;
             break;
         }
     }

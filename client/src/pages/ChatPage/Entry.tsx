@@ -14,7 +14,6 @@ import {WebSocketClient} from "@shared/api/WebSocketClient.ts";
 import {RTCPeer} from "@shared/api/RTCPeer.ts";
 import {handleMessage} from "@shared/lib/handleMessage.ts";
 import {generatePin} from "@shared/lib/generatePin.ts";
-import {fullResetConnection} from "@shared/lib/resetConnection.ts";
 import {CustomInput} from "@shared/ui/Input/Input.tsx";
 import {CustomButton} from "@shared/ui/Button/Button.tsx";
 
@@ -25,7 +24,6 @@ export const EntryPage = () => {
     const [mode, setMode] = useState<'idle' | 'host' | 'join'>('idle');
     const [chatHistory, setChatHistory] = useState<{ uuid: string, chatName: string }[]>([]);
     const [connectedPeerId, setConnectedPeerId] = useState<string | null>(null);
-    const [connectionVersion, setConnectionVersion] = useState(0);
 
     const endRef = useRef<HTMLDivElement | null>(null);
     const wsRef = useRef<WebSocketClient | null>(null);
@@ -51,7 +49,6 @@ export const EntryPage = () => {
         addLog,
         setLog,
         isReconnecting,
-        bumpConnectionVersion: () => setConnectionVersion(v => v + 1)
     });
 
     useEffect(() => {
@@ -75,8 +72,6 @@ export const EntryPage = () => {
                 addLog,
                 clearPinTimer,
                 loadChatHistory,
-                connectedPeerId,
-                bumpConnectionVersion: () => setConnectionVersion(v => v + 1),
             });
         });
 
@@ -85,9 +80,9 @@ export const EntryPage = () => {
             peer.current?.close();
             ws.close(1000, 'unmount cleanup');
             wsRef.current = null;
-            peer.current = null; // 👈 добавь это
+            peer.current = null;
         };
-    }, [mode, uuid, connectionVersion]);
+    }, [mode, uuid]);
 
     useEffect(() => {
         endRef.current?.scrollIntoView({behavior: 'smooth'});
@@ -108,6 +103,17 @@ export const EntryPage = () => {
         loadChatHistory();
     }, []);
 
+    useEffect(() => {
+        const handleUnload = () => {
+            if (wsRef.current && wsRef.current.getSocketReadyState() === WebSocket.OPEN) {
+                wsRef.current.send({ type: 'disconnect', to: connectedPeerId });
+            }
+        };
+
+        window.addEventListener('beforeunload', handleUnload);
+        return () => window.removeEventListener('beforeunload', handleUnload);
+    }, [connectedPeerId]);
+
     return (<Layout
         header={<Header/>}
         sidebar={<Sidebar
@@ -125,32 +131,23 @@ export const EntryPage = () => {
                 setLog([]);
             }}
             onFinishChat={() => {
-                fullResetConnection({
-                    wsRef,
-                    peerRef: peer,
-                    setConnectedPeerId,
-                    setStatus,
-                    setMode,
-                    setLog,
-                    connectedPeerId,
-                    bumpConnectionVersion: () => setConnectionVersion(v => v + 1)
-                });
+                peer.current?.close();
+                peer.current = null;
+                wsRef.current?.close(1000, 'manual disconnect');
+                wsRef.current = null;
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
             }}
         />}
         main={<div style={{display: "flex", flexDirection: "column", flex: 1, height: "100%"}}>
             {mode === "join" && !isReconnecting.current && (<div style={{
-                backgroundColor: '#330000',
-                padding: '1rem',
-                borderRadius: '8px',
-                marginBottom: '1rem',
-                color: 'white'
+                backgroundColor: '#330000', padding: '1rem', borderRadius: '8px', marginBottom: '1rem', color: 'white'
             }}>
                 <p>Скопируй этот PIN и отправь другу:</p>
                 <h2 style={{
-                    fontWeight: 'bold',
-                    fontSize: '2rem',
-                    letterSpacing: '0.1em',
-                    margin: '0.5rem 0'
+                    fontWeight: 'bold', fontSize: '2rem', letterSpacing: '0.1em', margin: '0.5rem 0'
                 }}>{pin}</h2>
                 <CustomButton onClick={() => navigator.clipboard.writeText(pin)}>📋 Скопировать</CustomButton>
             </div>)}
@@ -176,11 +173,7 @@ export const EntryPage = () => {
             </div>)}
 
             <div style={{
-                flex: 1,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column-reverse",
-                paddingBottom: "1rem"
+                flex: 1, overflowY: "auto", display: "flex", flexDirection: "column-reverse", paddingBottom: "1rem"
             }}>
                 <div style={{paddingBottom: "1rem"}}>
                     {log.length === 0 ? (
