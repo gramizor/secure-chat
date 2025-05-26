@@ -33,6 +33,21 @@ const ChatPage = () => {
             console.log('[WS] получено сообщение:', msg);
             switch (msg.type) {
                 case 'offer': {
+                    if (document.visibilityState === 'hidden' && 'serviceWorker' in navigator) {
+                        const chat = chatHistory.find(c => c.uuid === msg.from);
+                        const chatName = chat?.chatName ?? msg.from.slice(0, 6);
+
+                        navigator.serviceWorker.ready.then(reg => {
+                            reg.active?.postMessage({
+                                type: 'notify',
+                                payload: {
+                                    title: '💬 Входящее подключение',
+                                    body: `${chatName} хочет выйти на связь`,
+                                },
+                            });
+                        });
+                    }
+
                     if (status === 'connected' || peer.current || connectedPeerId) {
                         if (msg.from !== connectedPeerId) {
                             addPending(msg.from);
@@ -60,6 +75,7 @@ const ChatPage = () => {
                         if (!alreadySaved) {
                             const name = prompt("Введите имя чата") ?? "Без имени";
                             saveConnectionHistory(remoteUuid, name);
+                            loadChatHistory()
                         }
                     });
 
@@ -84,6 +100,7 @@ const ChatPage = () => {
                         const name = prompt("Введите имя чата") ?? "Без имени";
                         saveConnectionHistory(msg.from, name);
                         addLog(`[DB] сохранена история с uuid ${msg.from}`);
+                        loadChatHistory();
                     }
                     break;
                 }
@@ -96,8 +113,12 @@ const ChatPage = () => {
                     addLog(`🔌 собеседник завершил соединение`);
                     peer.current?.close();
                     peer.current = null;
+                    wsRef.current?.close();
+                    wsRef.current = null;
                     setConnectedPeerId(null);
                     setStatus('idle');
+                    setMode('idle');
+                    setLog([]);
                     break;
                 }
             }
@@ -169,13 +190,14 @@ const ChatPage = () => {
         setChatHistory(history);
         console.log('[DB] история загружена:', history);
     };
+
     const handleReconnect = async (peerUuid: string) => {
         if (status === 'connected') {
             const confirmSwitch = confirm("Сейчас уже есть активный чат. Завершить его и начать новый?");
             if (!confirmSwitch) return;
 
             if (connectedPeerId) {
-                wsRef.current?.send({ type: 'disconnect', to: connectedPeerId });
+                wsRef.current?.send({type: 'disconnect', to: connectedPeerId});
                 addLog(`📤 отправлен disconnect для ${connectedPeerId}`);
             }
 
@@ -209,11 +231,11 @@ const ChatPage = () => {
                 clearPending(peerUuid);
             });
             rtc.onIceCandidate(c => {
-                ws.send({ type: 'ice-candidate', to: peerUuid, data: { candidate: c } });
+                ws.send({type: 'ice-candidate', to: peerUuid, data: {candidate: c}});
             });
 
             const offer = await rtc.createOffer();
-            ws.send({ type: 'offer', to: peerUuid, data: { sdp: offer } });
+            ws.send({type: 'offer', to: peerUuid, data: {sdp: offer}});
             addLog('⏳ offer отправлен — ждём ответ 6 сек...');
 
             timeoutId = setTimeout(() => {
@@ -232,6 +254,9 @@ const ChatPage = () => {
 
     useEffect(() => {
         loadChatHistory();
+        if (Notification.permission !== 'granted') {
+            Notification.requestPermission();
+        }
     }, []);
 
     return (
@@ -239,6 +264,45 @@ const ChatPage = () => {
             <h2>🛰 P2P Chat</h2>
             <p>Статус: {status}</p>
 
+            <div>
+
+                <button
+                    onClick={async () => {
+                        if (connectedPeerId && wsRef.current?.getSocketReadyState() === WebSocket.OPEN) {
+                            wsRef.current.send({ type: 'disconnect', to: connectedPeerId });
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+
+                        peer.current?.close();
+                        peer.current = null;
+                        wsRef.current?.close();
+                        wsRef.current = null;
+                        setConnectedPeerId(null);
+                        setStatus('idle');
+                        setMode('idle');
+                        setLog([]);
+                    }}
+                >
+                    🔌 Завершить чат
+                </button>
+
+                <button
+                    onClick={async () => {
+                        await indexedDB.deleteDatabase('chatHistory');
+                        localStorage.removeItem('my-app-uuid');
+                        document.body.innerHTML = `
+      <div style="display: flex; height: 100vh; align-items: center; justify-content: center; flex-direction: column; font-family: sans-serif;">
+        <h1>🧹 Поздравляю, ваша история начинается с чистого листа!</h1>
+        <p>Теперь вы можете закрыть вкладку.</p>
+      </div>
+    `;
+                    }}
+                >
+                    🧨 Удалить все соединения и UUID
+                </button>
+
+
+            </div>
             {mode === 'idle' && (
                 <>
                     <button onClick={() => setMode('host')}>🔗 Создать соединение</button>

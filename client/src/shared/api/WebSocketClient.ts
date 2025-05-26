@@ -81,4 +81,8 @@ export class WebSocketClient {
         console.log('[WSClient] закрытие соединения');
         this.socket.close();
     }
+
+    getSocketReadyState() {
+        return this.socket.readyState;
+    }
 }
