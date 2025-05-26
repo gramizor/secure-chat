@@ -33,21 +33,6 @@ const ChatPage = () => {
             console.log('[WS] получено сообщение:', msg);
             switch (msg.type) {
                 case 'offer': {
-                    if (document.visibilityState === 'hidden' && 'serviceWorker' in navigator) {
-                        const chat = chatHistory.find(c => c.uuid === msg.from);
-                        const chatName = chat?.chatName ?? msg.from.slice(0, 6);
-
-                        navigator.serviceWorker.ready.then(reg => {
-                            reg.active?.postMessage({
-                                type: 'notify',
-                                payload: {
-                                    title: '💬 Входящее подключение',
-                                    body: `${chatName} хочет выйти на связь`,
-                                },
-                            });
-                        });
-                    }
-
                     if (status === 'connected' || peer.current || connectedPeerId) {
                         if (msg.from !== connectedPeerId) {
                             addPending(msg.from);
@@ -84,14 +69,19 @@ const ChatPage = () => {
                         data: {candidate: c}
                     }));
 
-                    const answer = await peer.current.acceptOffer(msg.data.sdp);
+                    const answer = await peer.current.acceptOffer(msg.data.sdp, msg.data.publicKey);
                     addLog('[RTC] answer создан');
-                    wsRef.current?.send({type: 'answer', to: msg.from, data: {sdp: answer}});
+                    // const publicKey = peer.current?.getPublicKey();
+                    wsRef.current?.send({
+                        type: 'answer',
+                        to: msg.from,
+                        data: {publicKey: answer.publicKey, sdp: answer.sdp}
+                    });
                     break;
                 }
                 case 'answer': {
                     addLog(`📩 answer от ${msg.from}`);
-                    await peer.current?.acceptAnswer(msg.data.sdp);
+                    await peer.current?.acceptAnswer(msg.data.sdp, msg.data.publicKey);
                     addLog('[RTC] answer принят (host)');
 
                     const alreadySaved = await connectionExists(msg.from);
@@ -112,7 +102,7 @@ const ChatPage = () => {
                     addLog(`🔌 собеседник завершил соединение`);
                     peer.current?.close();
                     peer.current = null;
-                    wsRef.current?.close();
+                    wsRef.current?.close(1000, 'собеседник завершил соединение');
                     wsRef.current = null;
                     setConnectedPeerId(null);
                     setStatus('idle');
@@ -126,7 +116,7 @@ const ChatPage = () => {
         return () => {
             console.log('[ChatPage] закрытие peer и WebSocket');
             peer.current?.close();
-            ws.close();
+            ws.close(1000, 'global useEf');
         };
     }, [mode, uuid]);
 
@@ -171,9 +161,9 @@ const ChatPage = () => {
                 data: {candidate: c}
             }));
 
-            const offer = await peer.current.createOffer();
+            const {sdp, publicKey} = await peer.current.createOffer();
             addLog('[RTC] offer создан (host)');
-            wsRef.current?.send({type: 'offer', to: targetId, data: {sdp: offer}});
+            wsRef.current?.send({type: 'offer', to: targetId, data: {sdp, publicKey}});
         });
     };
 
@@ -202,7 +192,7 @@ const ChatPage = () => {
 
             peer.current?.close();
             peer.current = null;
-            wsRef.current?.close();
+            wsRef.current?.close(1000, 'из реконекта');
             wsRef.current = null;
             setConnectedPeerId(null);
             setStatus('idle');
@@ -233,20 +223,20 @@ const ChatPage = () => {
                 ws.send({type: 'ice-candidate', to: peerUuid, data: {candidate: c}});
             });
 
-            const offer = await rtc.createOffer();
-            ws.send({type: 'offer', to: peerUuid, data: {sdp: offer}});
+            const {sdp, publicKey} = await rtc.createOffer();
+            ws.send({type: 'offer', to: peerUuid, data: {sdp, publicKey}});
             addLog('⏳ offer отправлен — ждём ответ 6 сек...');
 
             timeoutId = setTimeout(() => {
                 addLog('⌛ истекло время ожидания ответа — отмена подключения');
                 peer.current?.close();
                 peer.current = null;
-                wsRef.current?.close();
+                wsRef.current?.close(1000, 'обнуляем после простоя');
                 wsRef.current = null;
                 setStatus('idle');
                 setMode('idle');
                 setConnectedPeerId(null);
-            }, 6000);
+            }, 5000);
         });
     };
 
@@ -268,13 +258,13 @@ const ChatPage = () => {
                 <button
                     onClick={async () => {
                         if (connectedPeerId && wsRef.current?.getSocketReadyState() === WebSocket.OPEN) {
-                            wsRef.current.send({ type: 'disconnect', to: connectedPeerId });
+                            wsRef.current.send({type: 'disconnect', to: connectedPeerId});
                             await new Promise(resolve => setTimeout(resolve, 100));
                         }
 
                         peer.current?.close();
                         peer.current = null;
-                        wsRef.current?.close();
+                        wsRef.current?.close(1000, 'кнопка завершить чат');
                         wsRef.current = null;
                         setConnectedPeerId(null);
                         setStatus('idle');
@@ -348,18 +338,9 @@ const ChatPage = () => {
                 {chatHistory.map((chat, index) => (
                     <li key={index}>
                         <button
-                            onClick={() => {
-                                if (isPending(chat.uuid)) {
-                                    const confirmSwitch = confirm("Поступил входящий запрос от этого пользователя. Завершить текущий чат и подключиться?");
-                                    if (!confirmSwitch) return;
-
-                                    peer.current?.close();
-                                    wsRef.current?.close();
-                                    setStatus('idle');
-                                }
-
-                                handleReconnect(chat.uuid);
-                            }}
+                            onClick={() =>
+                                handleReconnect(chat.uuid)
+                            }
                         >
                             {chat.chatName} {isPending(chat.uuid) ? '❗' : ''}
                         </button>

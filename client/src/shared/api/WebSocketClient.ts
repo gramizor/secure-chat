@@ -6,6 +6,7 @@ export class WebSocketClient {
     private openListeners = new Set<() => void>();
     private id: string;
     private uuid: string;
+    private wasOpened = false;
 
     constructor(id: string, pin?: string) {
         this.id = id;
@@ -16,6 +17,7 @@ export class WebSocketClient {
 
         this.socket.onopen = () => {
             console.log('[WSClient] соединение установлено');
+            this.wasOpened = true;
 
             const payload: any = {
                 type: 'join',
@@ -35,6 +37,7 @@ export class WebSocketClient {
                 console.log('[WSClient] вызов openListener');
                 cb();
             });
+            this.openListeners.clear();
         };
 
         this.socket.onmessage = (event) => {
@@ -51,8 +54,12 @@ export class WebSocketClient {
             console.error('[WSClient] ошибка сокета', e);
         };
 
-        this.socket.onclose = () => {
-            console.warn('[WSClient] соединение закрыто');
+        this.socket.onclose = (event) => {
+            console.warn('[WSClient] соединение закрыто', {
+                wasClean: event.wasClean,
+                code: event.code,
+                reason: event.reason
+            });
         };
     }
 
@@ -62,7 +69,7 @@ export class WebSocketClient {
     }
 
     onOpen(cb: () => void) {
-        if (this.socket.readyState === WebSocket.OPEN) {
+        if (this.wasOpened || this.socket.readyState === WebSocket.OPEN) {
             console.log('[WSClient] socket уже открыт — вызываем cb немедленно');
             cb();
         } else {
@@ -72,14 +79,14 @@ export class WebSocketClient {
     }
 
     send(data: any) {
-        const enriched = { ...data, from: this.id, uuid: this.uuid };
+        const enriched = {...data, from: this.id, uuid: this.uuid};
         console.log('[WSClient] отправка сообщения:', enriched);
         this.socket.send(JSON.stringify(enriched));
     }
 
-    close() {
+    close(code: number, desc: string) {
         console.log('[WSClient] закрытие соединения');
-        this.socket.close();
+        this.socket.close(code, desc);
     }
 
     getSocketReadyState() {
