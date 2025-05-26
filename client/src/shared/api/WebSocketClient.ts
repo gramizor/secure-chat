@@ -7,6 +7,7 @@ export class WebSocketClient {
     private id: string;
     private uuid: string;
     private wasOpened = false;
+    private closeListeners = new Set<() => void>();
 
     constructor(id: string, pin?: string) {
         this.id = id;
@@ -20,9 +21,7 @@ export class WebSocketClient {
             this.wasOpened = true;
 
             const payload: any = {
-                type: 'join',
-                from: this.id,
-                uuid: this.uuid
+                type: 'join', from: this.id, uuid: this.uuid
             };
 
             if (pin) {
@@ -56,10 +55,10 @@ export class WebSocketClient {
 
         this.socket.onclose = (event) => {
             console.warn('[WSClient] соединение закрыто', {
-                wasClean: event.wasClean,
-                code: event.code,
-                reason: event.reason
+                wasClean: event.wasClean, code: event.code, reason: event.reason
             });
+            this.closeListeners.forEach(cb => cb());
+            this.closeListeners.clear();
         };
     }
 
@@ -87,6 +86,10 @@ export class WebSocketClient {
     close(code: number, desc: string) {
         console.log('[WSClient] закрытие соединения');
         this.socket.close(code, desc);
+    }
+
+    onClose(cb: () => void) {
+        this.closeListeners.add(cb);
     }
 
     getSocketReadyState() {

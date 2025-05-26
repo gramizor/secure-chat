@@ -3,11 +3,9 @@ import {SecureChannel} from '@shared/lib/secureChannel';
 
 export class RTCPeer {
     private peer = new RTCPeerConnection({
-        iceServers: [
-            {
-                urls: ['stun:31.128.46.246:3478']
-            }
-        ]
+        iceServers: [{
+            urls: ['stun:31.128.46.246:3478']
+        }]
     });
     private channel: RTCDataChannel | null = null;
     private listeners = new Set<(msg: string) => void>();
@@ -58,11 +56,6 @@ export class RTCPeer {
         this.iceCallback = cb;
     }
 
-    getPublicKey(): string {
-        if (!this.publicKey) throw new Error('PublicKey is not initialized');
-        return this.publicKey;
-    }
-
     async createOffer(): Promise<{ sdp: RTCSessionDescriptionInit; publicKey: string }> {
         if (this.isInitiator) {
             this.channel = this.peer.createDataChannel("chat");
@@ -86,8 +79,7 @@ export class RTCPeer {
     }
 
     async acceptOffer(sdp: RTCSessionDescriptionInit, remotePublicKey: string): Promise<{
-        sdp: RTCSessionDescriptionInit;
-        publicKey: string
+        sdp: RTCSessionDescriptionInit; publicKey: string
     }> {
         console.log('📥 accepting offer');
         await this.peer.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -135,6 +127,7 @@ export class RTCPeer {
         if (this.monitorInterval) clearInterval(this.monitorInterval);
         this.channel?.close();
         this.peer.close();
+        this.onCloseCallback?.();
     }
 
     onClose(cb: () => void) {

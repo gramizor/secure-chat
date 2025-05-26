@@ -14,17 +14,18 @@ import {WebSocketClient} from "@shared/api/WebSocketClient.ts";
 import {RTCPeer} from "@shared/api/RTCPeer.ts";
 import {handleMessage} from "@shared/lib/handleMessage.ts";
 import {generatePin} from "@shared/lib/generatePin.ts";
-import {resetConnection} from "@shared/lib/resetConnection.ts";
+import {fullResetConnection} from "@shared/lib/resetConnection.ts";
 import {CustomInput} from "@shared/ui/Input/Input.tsx";
 import {CustomButton} from "@shared/ui/Button/Button.tsx";
 
 export const EntryPage = () => {
-    const [input, setInput] = useState<string>("");
-    const [targetId, setTargetId] = useState<string>("");
+    const [input, setInput] = useState("");
+    const [targetId, setTargetId] = useState("");
     const [status, setStatus] = useState<'idle' | 'connecting' | 'connected'>('idle');
     const [mode, setMode] = useState<'idle' | 'host' | 'join'>('idle');
     const [chatHistory, setChatHistory] = useState<{ uuid: string, chatName: string }[]>([]);
     const [connectedPeerId, setConnectedPeerId] = useState<string | null>(null);
+    const [connectionVersion, setConnectionVersion] = useState(0);
 
     const endRef = useRef<HTMLDivElement | null>(null);
     const wsRef = useRef<WebSocketClient | null>(null);
@@ -49,7 +50,8 @@ export const EntryPage = () => {
         setMode,
         addLog,
         setLog,
-        isReconnecting
+        isReconnecting,
+        bumpConnectionVersion: () => setConnectionVersion(v => v + 1)
     });
 
     useEffect(() => {
@@ -73,6 +75,8 @@ export const EntryPage = () => {
                 addLog,
                 clearPinTimer,
                 loadChatHistory,
+                connectedPeerId,
+                bumpConnectionVersion: () => setConnectionVersion(v => v + 1),
             });
         });
 
@@ -81,8 +85,9 @@ export const EntryPage = () => {
             peer.current?.close();
             ws.close(1000, 'unmount cleanup');
             wsRef.current = null;
+            peer.current = null; // 👈 добавь это
         };
-    }, [mode, uuid]);
+    }, [mode, uuid, connectionVersion]);
 
     useEffect(() => {
         endRef.current?.scrollIntoView({behavior: 'smooth'});
@@ -90,7 +95,7 @@ export const EntryPage = () => {
 
     useEffect(() => {
         if (mode !== 'join') return;
-        isReconnecting.current = false
+        isReconnecting.current = false;
         const interval = setInterval(() => {
             const newPin = generatePin();
             setPin(newPin);
@@ -99,172 +104,141 @@ export const EntryPage = () => {
         return () => clearInterval(interval);
     }, [mode]);
 
-
     useEffect(() => {
         loadChatHistory();
     }, []);
 
-    return (
-        <Layout
-            header={
-                <Header/>
-            }
-            sidebar={
-                <Sidebar
-                    chatHistory={chatHistory}
-                    setMode={setMode}
-                    reconnect={reconnect}
-                    connectedPeerId={connectedPeerId}
-                    onDeleteAll={() => {
-                        indexedDB.deleteDatabase("chatHistory");
-                        localStorage.removeItem("my-app-uuid");
-                        setChatHistory([]);
-                        setConnectedPeerId(null);
-                        setStatus("idle");
-                        setMode("idle");
-                        setLog([]);
-                    }}
-                    onFinishChat={() => {
-                        resetConnection(wsRef, peer, setConnectedPeerId, setStatus, setMode, setLog);
-                    }}
+    return (<Layout
+        header={<Header/>}
+        sidebar={<Sidebar
+            chatHistory={chatHistory}
+            setMode={setMode}
+            reconnect={reconnect}
+            connectedPeerId={connectedPeerId}
+            onDeleteAll={() => {
+                indexedDB.deleteDatabase("chatHistory");
+                localStorage.removeItem("my-app-uuid");
+                setChatHistory([]);
+                setConnectedPeerId(null);
+                setStatus("idle");
+                setMode("idle");
+                setLog([]);
+            }}
+            onFinishChat={() => {
+                fullResetConnection({
+                    wsRef,
+                    peerRef: peer,
+                    setConnectedPeerId,
+                    setStatus,
+                    setMode,
+                    setLog,
+                    connectedPeerId,
+                    bumpConnectionVersion: () => setConnectionVersion(v => v + 1)
+                });
+            }}
+        />}
+        main={<div style={{display: "flex", flexDirection: "column", flex: 1, height: "100%"}}>
+            {mode === "join" && !isReconnecting.current && (<div style={{
+                backgroundColor: '#330000',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                color: 'white'
+            }}>
+                <p>Скопируй этот PIN и отправь другу:</p>
+                <h2 style={{
+                    fontWeight: 'bold',
+                    fontSize: '2rem',
+                    letterSpacing: '0.1em',
+                    margin: '0.5rem 0'
+                }}>{pin}</h2>
+                <CustomButton onClick={() => navigator.clipboard.writeText(pin)}>📋 Скопировать</CustomButton>
+            </div>)}
+
+            {mode === "host" && !isReconnecting.current && (<div style={{
+                backgroundColor: '#330000', padding: '1rem', borderRadius: '8px', marginBottom: '1rem'
+            }}>
+                <p>Вставь UUID друга:</p>
+                <CustomInput
+                    value={targetId}
+                    onChange={setTargetId}
+                    placeholder="UUID подключающегося"
+                    style={{width: '100%'}}
+                    rows={1}
                 />
-            }
-            main={
-                <div style={{display: "flex", flexDirection: "column", flex: 1, height: "100%"}}>
-                    {mode === "join" && !isReconnecting.current && (
-                        <div style={{
-                            backgroundColor: '#330000',
-                            padding: '1rem',
-                            borderRadius: '8px',
-                            marginBottom: '1rem',
-                            color: 'white'
-                        }}>
-                            <p>Скопируй этот PIN и отправь другу:</p>
-                            <h2 style={{
-                                fontWeight: 'bold',
-                                fontSize: '2rem',
-                                letterSpacing: '0.1em',
-                                margin: '0.5rem 0'
-                            }}>{pin}</h2>
-                            <CustomButton onClick={() => navigator.clipboard.writeText(pin)}>📋
-                                Скопировать</CustomButton>
-                        </div>
-                    )}
+                <CustomButton
+                    style={{marginTop: '1rem'}}
+                    onClick={startAsHost}
+                    isDisabled={!targetId.trim()}
+                >
+                    🚀 Начать соединение
+                </CustomButton>
+            </div>)}
 
-                    {mode === "host" && !isReconnecting.current && (
-                        <div style={{
-                            backgroundColor: '#330000',
-                            padding: '1rem',
-                            borderRadius: '8px',
-                            marginBottom: '1rem'
-                        }}>
-                            <p>Вставь UUID друга:</p>
-                            <CustomInput
-                                value={targetId}
-                                onChange={setTargetId} // ✅ просто передаёшь setTargetId напрямую
-                                placeholder="UUID подключающегося"
-                                style={{width: '100%'}}
-                                rows={1}
-                            />
-                            <CustomButton
-                                style={{marginTop: '1rem'}}
-                                onClick={startAsHost}
-                                isDisabled={!targetId.trim()}
+            <div style={{
+                flex: 1,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column-reverse",
+                paddingBottom: "1rem"
+            }}>
+                <div style={{paddingBottom: "1rem"}}>
+                    {log.length === 0 ? (
+                        <div style={{color: "#aaa", fontSize: "1rem", margin: "auto", textAlign: "center"}}>
+                            {status === 'connecting' ? 'Устанавливаем соединение...' : status === 'connected' ? 'Начните общаться!' : 'Здесь будут сообщения'}
+                        </div>) : (<>
+                        {log.map((entry, i) => {
+                            const isMine = entry.startsWith("\ud83e\udecd");
+                            const text = isMine ? entry.slice(2) : entry;
+
+                            return (<div
+                                key={i}
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: isMine ? "flex-end" : "flex-start",
+                                    maxWidth: 500,
+                                    marginBottom: "0.5rem"
+                                }}
                             >
-                                🚀 Начать соединение
-                            </CustomButton>
-                        </div>
-                    )}
-
-                    <div style={{
-                        flex: 1,
-                        overflowY: "auto",
-                        display: "flex",
-                        flexDirection: "column-reverse",
-                        paddingBottom: "1rem"
-                    }}>
-                        <div
-                            style={{
-                                paddingBottom: "1rem",
-                            }}
-                        >
-                            {log.length === 0 ? (
+                                                <span style={{fontSize: "0.75rem", color: "#ccc", marginBottom: 4}}>
+                                                    {isMine ? "Вы:" : "Собеседник:"}
+                                                </span>
                                 <div style={{
-                                    color: "#aaa",
-                                    fontSize: "1rem",
-                                    margin: "auto",
-                                    textAlign: "center"
+                                    background: "white",
+                                    color: "black",
+                                    padding: "0.5rem 1rem",
+                                    borderRadius: "12px",
+                                    wordBreak: "break-word"
                                 }}>
-                                    {status === 'connecting' ? 'Устанавливаем соединение...' : status === 'connected' ? 'Начните общаться!' : 'Здесь будут сообщения'}
+                                    {text}
                                 </div>
-                            ) : (
-                                <>
-                                    {log.map((entry, i) => {
-                                        const isMine = entry.startsWith("🧍");
-                                        const text = isMine ? entry.slice(2) : entry;
-
-                                        return (
-                                            <div
-                                                key={i}
-                                                style={{
-                                                    display: "flex",
-                                                    flexDirection: "column",
-                                                    alignItems: isMine ? "flex-end" : "flex-start",
-                                                    maxWidth: 500,
-                                                    marginBottom: "0.5rem",
-                                                }}
-                                            >
-            <span
-                style={{
-                    fontSize: "0.75rem",
-                    color: "#ccc",
-                    marginBottom: 4,
-                }}
-            >
-                {isMine ? "Вы:" : "Собеседник:"}
-            </span>
-                                                <div
-                                                    style={{
-                                                        background: "white",
-                                                        color: "black",
-                                                        padding: "0.5rem 1rem",
-                                                        borderRadius: "12px",
-                                                        wordBreak: "break-word",
-                                                    }}
-                                                >
-                                                    {text}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-
-                                    <div ref={endRef}/>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    <div style={{display: "flex", gap: 8, marginTop: '1rem'}}>
-                        <CustomInput
-                            value={input}
-                            onChange={setInput}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    send(input, status, () => setInput(""));
-                                }
-                            }}
-                            disabled={status !== "connected"}
-                        />
-                        <CustomButton
-                            onClick={() => send(input, status, () => setInput(""))}
-                            isDisabled={status !== "connected"}
-                        >
-                            Отправить
-                        </CustomButton>
-                    </div>
+                            </div>);
+                        })}
+                        <div ref={endRef}/>
+                    </>)}
                 </div>
-            }
-        />
-    );
+            </div>
+
+            <div style={{display: "flex", gap: 8, marginTop: '1rem'}}>
+                <CustomInput
+                    value={input}
+                    onChange={setInput}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            send(input, status, () => setInput(""));
+                        }
+                    }}
+                    isDisabled={status !== "connected"}
+                />
+                <CustomButton
+                    onClick={() => send(input, status, () => setInput(""))}
+                    isDisabled={status !== "connected"}
+                >
+                    Отправить
+                </CustomButton>
+            </div>
+        </div>}
+    />);
 };

@@ -6,24 +6,25 @@ interface CustomInputProps {
     placeholder?: string;
     rows?: number;
     style?: React.CSSProperties;
+    isDisabled?: boolean;
 }
 
 export const CustomInput = ({
                                 value,
                                 onChange,
                                 onKeyDown,
-                                disabled = false,
                                 placeholder = "Введите сообщение...",
                                 rows = 1,
-                                style
+                                style,
+                                isDisabled = false,
                             }: CustomInputProps) => (
     <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        disabled={disabled}
         rows={rows}
         placeholder={placeholder}
+        disabled={isDisabled}
         style={{
             flex: 1,
             padding: '0.5rem',
@@ -33,6 +34,7 @@ export const CustomInput = ({
             border: '1px solid #555',
             resize: 'none',
             fontFamily: 'inherit', // 👈 обеспечит одинаковый шрифт
+            cursor: isDisabled ? 'not-allowed' : 'text',
             ...style
         }}
     />

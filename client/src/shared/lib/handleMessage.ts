@@ -2,6 +2,7 @@ import {RTCPeer} from "@shared/api/RTCPeer";
 import {WebSocketClient} from "@shared/api/WebSocketClient";
 import {connectionExists, saveConnectionHistory} from "@shared/lib/db";
 import {addPending, clearPending} from "@shared/lib/pendingManager";
+import {bindConnectionWatchers} from "@shared/lib/resetConnection";
 
 interface HandleMessageParams {
     msg: any;
@@ -16,13 +17,25 @@ interface HandleMessageParams {
     addLog: (txt: string, system: boolean) => void;
     clearPinTimer: () => void;
     loadChatHistory: () => void;
+    bumpConnectionVersion?: () => void;
+    connectedPeerId?: string | null;
 }
 
 export const handleMessage = ({
-                                  msg, selfId, peer, wsRef, status,
-                                  setConnectedPeerId, setStatus, setMode, setLog,
-                                  addLog, clearPinTimer, loadChatHistory,
-                              }: HandleMessageParams & { msg: any }) => {
+                                  msg,
+                                  selfId,
+                                  peer,
+                                  wsRef,
+                                  status,
+                                  setConnectedPeerId,
+                                  setStatus,
+                                  setMode,
+                                  setLog,
+                                  addLog,
+                                  clearPinTimer,
+                                  loadChatHistory,
+                                  bumpConnectionVersion,
+                              }: HandleMessageParams) => {
     switch (msg.type) {
         case "offer": {
             if (status === "connected" || peer.current || wsRef.current?.getSocketReadyState() !== 1) {
@@ -55,20 +68,21 @@ export const handleMessage = ({
                 }
             });
 
-            peer.current.onIceCandidate((c) =>
-                wsRef.current?.send({type: "ice-candidate", to: msg.from, data: {candidate: c}})
-            );
+            peer.current.onIceCandidate((c) => wsRef.current?.send({
+                type: "ice-candidate",
+                to: msg.from,
+                data: {candidate: c}
+            }));
 
-            peer.current.onClose?.(() => {
-                addLog("🚫 соединение прервано — по ошибке канала", true);
-                peer.current?.close();
-                wsRef.current?.close(1000, "datachannel error");
-                wsRef.current = null;
-                peer.current = null;
-                setConnectedPeerId(null);
-                setStatus("idle");
-                setMode("idle");
-                setLog([]);
+            bindConnectionWatchers(peer.current, wsRef.current!, {
+                wsRef,
+                peerRef: peer,
+                setConnectedPeerId,
+                setStatus,
+                setMode,
+                setLog,
+                connectedPeerId: msg.from,
+                bumpConnectionVersion,
             });
 
             peer.current.acceptOffer(msg.data.sdp, msg.data.publicKey).then((answer) => {
@@ -99,15 +113,7 @@ export const handleMessage = ({
         }
 
         case "disconnect": {
-            addLog(`🔌 собеседник завершил соединение`, true);
-            peer.current?.close();
-            peer.current = null;
-            wsRef.current?.close(1000, "disconnect");
-            wsRef.current = null;
-            setConnectedPeerId(null);
-            setStatus("idle");
-            setMode("idle");
-            setLog([]);
+            bumpConnectionVersion?.();
             break;
         }
     }

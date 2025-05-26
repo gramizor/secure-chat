@@ -2,6 +2,7 @@ import {useCallback} from "react";
 import {RTCPeer} from "@shared/api/RTCPeer";
 import {WebSocketClient} from "@shared/api/WebSocketClient";
 import {clearPending} from "@shared/lib/pendingManager";
+import {bindConnectionWatchers} from "@shared/lib/resetConnection";
 
 export const useReconnect = ({
                                  uuid,
@@ -14,7 +15,8 @@ export const useReconnect = ({
                                  setMode,
                                  addLog,
                                  setLog,
-                                 isReconnecting
+                                 isReconnecting,
+                                 bumpConnectionVersion
                              }: {
     uuid: string;
     wsRef: React.MutableRefObject<WebSocketClient | null>;
@@ -26,81 +28,66 @@ export const useReconnect = ({
     setMode: (mode: "idle" | "host" | "join") => void;
     addLog: (msg: string, system: boolean) => void;
     setLog: (logs: string[]) => void;
-    isReconnecting: React.RefObject<boolean>
+    isReconnecting: React.RefObject<boolean>;
+    bumpConnectionVersion: () => void;
 }) => {
-    return useCallback(
-        async (peerUuid: string) => {
-            if (status === "connected") {
-                const confirmSwitch = confirm(
-                    "Сейчас уже есть активный чат. Завершить его и начать новый?"
-                );
-                if (!confirmSwitch) return;
+    return useCallback(async (peerUuid: string) => {
+        if (status === "connected") {
+            const confirmSwitch = confirm("Сейчас уже есть активный чат. Завершить его и начать новый?");
+            if (!confirmSwitch) return;
 
-                if (connectedPeerId) {
-                    wsRef.current?.send({type: "disconnect", to: connectedPeerId});
-                    addLog(`📤 отправлен disconnect для ${connectedPeerId}`, true);
-                }
-
-                peer.current?.close();
-                peer.current = null;
-                wsRef.current?.close(1000, "из реконекта");
-                wsRef.current = null;
-                setConnectedPeerId(null);
-                setStatus("idle");
+            if (connectedPeerId) {
+                wsRef.current?.send({type: "disconnect", to: connectedPeerId});
+                addLog(`📤 отправлен disconnect для ${connectedPeerId}`, true);
             }
-            isReconnecting.current = true;
-            setMode("host");
-            setStatus("connecting");
-            addLog(`🔁 подключение к ${peerUuid.slice(0, 6)}`, true);
 
-            const ws = new WebSocketClient(uuid);
-            wsRef.current = ws;
+            bumpConnectionVersion();
+        }
 
-            let timeoutId: NodeJS.Timeout;
+        isReconnecting.current = true;
+        setMode("host");
+        setStatus("connecting");
+        addLog(`🔁 подключение к ${peerUuid.slice(0, 6)}`, true);
 
-            ws.onOpen(async () => {
-                const rtc = new RTCPeer(true);
-                peer.current = rtc;
+        const ws = new WebSocketClient(uuid);
+        wsRef.current = ws;
 
-                rtc.onMessage((m) => addLog(`${m}`, false));
-                rtc.onOpen(() => {
-                    clearTimeout(timeoutId);
-                    setStatus("connected");
-                    setConnectedPeerId(peerUuid);
-                    addLog("🔗 канал открыт", true);
-                    clearPending(peerUuid);
-                });
-                rtc.onIceCandidate((c) => {
-                    ws.send({type: "ice-candidate", to: peerUuid, data: {candidate: c}});
-                });
+        let timeoutId: NodeJS.Timeout;
 
-                const {sdp, publicKey} = await rtc.createOffer();
-                ws.send({type: "offer", to: peerUuid, data: {sdp, publicKey}});
-                addLog("⏳ offer отправлен — ждём ответ 6 сек...", true);
+        ws.onOpen(async () => {
+            const rtc = new RTCPeer(true);
+            peer.current = rtc;
 
-                timeoutId = setTimeout(() => {
-                    addLog("⌛ истекло время ожидания ответа — отмена подключения", true);
-                    peer.current?.close();
-                    peer.current = null;
-                    wsRef.current?.close(1000, "обнуляем после простоя");
-                    wsRef.current = null;
-                    setStatus("idle");
-                    setMode("idle");
-                    setConnectedPeerId(null);
-                }, 7000);
+            rtc.onMessage((m) => addLog(`${m}`, false));
+            rtc.onOpen(() => {
+                clearTimeout(timeoutId);
+                setStatus("connected");
+                setConnectedPeerId(peerUuid);
+                addLog("🔗 канал открыт", true);
+                clearPending(peerUuid);
             });
-        },
-        [
-            uuid,
-            wsRef,
-            peer,
-            status,
-            connectedPeerId,
-            setConnectedPeerId,
-            setStatus,
-            setMode,
-            addLog,
-            setLog,
-        ]
-    );
+            rtc.onIceCandidate((c) => {
+                ws.send({type: "ice-candidate", to: peerUuid, data: {candidate: c}});
+            });
+
+            bindConnectionWatchers(rtc, ws, {
+                wsRef,
+                peerRef: peer,
+                setConnectedPeerId,
+                setStatus,
+                setMode,
+                setLog,
+                connectedPeerId: peerUuid,
+                bumpConnectionVersion
+            });
+
+            const {sdp, publicKey} = await rtc.createOffer();
+            ws.send({type: "offer", to: peerUuid, data: {sdp, publicKey}});
+            addLog("⏳ offer отправлен — ждём ответ 6 сек...", true);
+
+            timeoutId = setTimeout(() => {
+                bumpConnectionVersion();
+            }, 7000);
+        });
+    }, [uuid, wsRef, peer, status, connectedPeerId, setConnectedPeerId, setStatus, setMode, addLog, setLog, bumpConnectionVersion]);
 };
