@@ -16,6 +16,7 @@ const ChatPage = () => {
     const [status, setStatus] = useState<'idle' | 'connecting' | 'connected'>('idle');
     const [mode, setMode] = useState<'idle' | 'host' | 'join'>('idle');
     const [chatHistory, setChatHistory] = useState<{ uuid: string, chatName: string }[]>([]);
+    const [connectedPeerId, setConnectedPeerId] = useState<string | null>(null);
 
     const wsRef = useRef<WebSocketClient | null>(null);
     const peer = useRef<RTCPeer | null>(null);
@@ -32,9 +33,13 @@ const ChatPage = () => {
             console.log('[WS] получено сообщение:', msg);
             switch (msg.type) {
                 case 'offer': {
-                    if (status === 'connected') {
-                        addPending(msg.from);
-                        addLog(`📥 входящий offer от ${msg.from} сохранён`);
+                    if (status === 'connected' || peer.current || connectedPeerId) {
+                        if (msg.from !== connectedPeerId) {
+                            addPending(msg.from);
+                            addLog(`📥 уже есть соединение, входящий offer от ${msg.from} сохранён в pending`);
+                        } else {
+                            addLog(`⚠️ повторный offer от текущего peer ${msg.from} — игнор`);
+                        }
                         return;
                     }
 
@@ -44,6 +49,7 @@ const ChatPage = () => {
 
                     peer.current.onMessage(m => addLog(`👤 ${m}`));
                     peer.current.onOpen(async () => {
+                        setConnectedPeerId(msg.from);
                         setStatus('connected');
                         addLog('🔗 канал открыт');
                         clearPinTimer();
@@ -84,6 +90,14 @@ const ChatPage = () => {
                 case 'ice-candidate': {
                     await peer.current?.addIceCandidate(msg.data.candidate);
                     addLog('[ICE] кандидат добавлен');
+                    break;
+                }
+                case 'disconnect': {
+                    addLog(`🔌 собеседник завершил соединение`);
+                    peer.current?.close();
+                    peer.current = null;
+                    setConnectedPeerId(null);
+                    setStatus('idle');
                     break;
                 }
             }
@@ -155,17 +169,32 @@ const ChatPage = () => {
         setChatHistory(history);
         console.log('[DB] история загружена:', history);
     };
-
     const handleReconnect = async (peerUuid: string) => {
+        if (status === 'connected') {
+            const confirmSwitch = confirm("Сейчас уже есть активный чат. Завершить его и начать новый?");
+            if (!confirmSwitch) return;
+
+            if (connectedPeerId) {
+                wsRef.current?.send({ type: 'disconnect', to: connectedPeerId });
+                addLog(`📤 отправлен disconnect для ${connectedPeerId}`);
+            }
+
+            peer.current?.close();
+            peer.current = null;
+            wsRef.current?.close();
+            wsRef.current = null;
+            setConnectedPeerId(null);
+            setStatus('idle');
+        }
+
         setMode('host');
         setStatus('connecting');
         addLog(`🔁 подключение к ${peerUuid.slice(0, 6)}`);
 
-        peer.current?.close();
-        wsRef.current?.close();
-
         const ws = new WebSocketClient(uuid);
         wsRef.current = ws;
+
+        let timeoutId: NodeJS.Timeout;
 
         ws.onOpen(async () => {
             const rtc = new RTCPeer(true);
@@ -173,15 +202,30 @@ const ChatPage = () => {
 
             rtc.onMessage(m => addLog(`👤 ${m}`));
             rtc.onOpen(() => {
+                clearTimeout(timeoutId); // ответ получен вовремя
                 setStatus('connected');
+                setConnectedPeerId(peerUuid);
                 addLog('🔗 канал открыт');
+                clearPending(peerUuid);
             });
             rtc.onIceCandidate(c => {
-                ws.send({type: 'ice-candidate', to: peerUuid, data: {candidate: c}});
+                ws.send({ type: 'ice-candidate', to: peerUuid, data: { candidate: c } });
             });
 
             const offer = await rtc.createOffer();
-            ws.send({type: 'offer', to: peerUuid, data: {sdp: offer}});
+            ws.send({ type: 'offer', to: peerUuid, data: { sdp: offer } });
+            addLog('⏳ offer отправлен — ждём ответ 6 сек...');
+
+            timeoutId = setTimeout(() => {
+                addLog('⌛ истекло время ожидания ответа — отмена подключения');
+                peer.current?.close();
+                peer.current = null;
+                wsRef.current?.close();
+                wsRef.current = null;
+                setStatus('idle');
+                setMode('idle');
+                setConnectedPeerId(null);
+            }, 6000);
         });
     };
 
@@ -240,7 +284,20 @@ const ChatPage = () => {
             <ul>
                 {chatHistory.map((chat, index) => (
                     <li key={index}>
-                        <button onClick={() => handleReconnect(chat.uuid)}>
+                        <button
+                            onClick={() => {
+                                if (isPending(chat.uuid)) {
+                                    const confirmSwitch = confirm("Поступил входящий запрос от этого пользователя. Завершить текущий чат и подключиться?");
+                                    if (!confirmSwitch) return;
+
+                                    peer.current?.close();
+                                    wsRef.current?.close();
+                                    setStatus('idle');
+                                }
+
+                                handleReconnect(chat.uuid);
+                            }}
+                        >
                             {chat.chatName} {isPending(chat.uuid) ? '❗' : ''}
                         </button>
                     </li>
