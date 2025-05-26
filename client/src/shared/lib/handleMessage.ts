@@ -37,10 +37,8 @@ export const handleMessage = ({
             if (status === "connected" || peer.current || wsRef.current?.getSocketReadyState() !== 1) {
                 if (msg.from !== selfId) {
                     addPending(msg.from);
-                    console.log('current status:', status)
-                    console.log('peer.current:', peer.current)
-                    console.log('wsRef.current?.getSocketReadyState():', wsRef.current?.getSocketReadyState())
                     addLog(`📥 уже есть соединение, входящий offer от ${msg.from} сохранён в pending`, true);
+                    loadChatHistory();
                 } else {
                     addLog(`⚠️ повторный offer от текущего peer ${msg.from} — игнор`, true);
                 }

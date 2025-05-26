@@ -101,8 +101,6 @@ export const useReconnect = ({
                 addLog("⌛ истекло время ожидания ответа — отмена подключения", true);
                 peer.current?.close();
                 peer.current = null;
-                wsRef.current?.close(1000, "timeout");
-                wsRef.current = null;
                 setConnectedPeerId(null);
                 setStatus("idle");
                 setMode("idle");

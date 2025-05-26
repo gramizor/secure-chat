@@ -145,13 +145,11 @@ export class RTCPeer {
                 const data = JSON.parse(e.data);
 
                 if (data.type === 'ping') {
-                    console.log('⌛ ping sended');
                     this.channel?.send(JSON.stringify({ type: 'pong' }));
                     return;
                 }
 
                 if (data.type === 'pong') {
-                    console.log('✅ pong received');
                     this.lastPongTimestamp = Date.now();
                     return;
                 }

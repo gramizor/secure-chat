@@ -106,7 +106,7 @@ export const EntryPage = () => {
     useEffect(() => {
         const handleUnload = () => {
             if (wsRef.current && wsRef.current.getSocketReadyState() === WebSocket.OPEN) {
-                wsRef.current.send({ type: 'disconnect', to: connectedPeerId });
+                wsRef.current.send({type: 'disconnect', to: connectedPeerId});
             }
         };
 
@@ -181,7 +181,7 @@ export const EntryPage = () => {
                             {status === 'connecting' ? 'Устанавливаем соединение...' : status === 'connected' ? 'Начните общаться!' : 'Здесь будут сообщения'}
                         </div>) : (<>
                         {log.map((entry, i) => {
-                            const isMine = entry.startsWith("\ud83e\udecd");
+                            const isMine = entry.startsWith("🧍");
                             const text = isMine ? entry.slice(2) : entry;
 
                             return (<div
@@ -190,23 +190,27 @@ export const EntryPage = () => {
                                     display: "flex",
                                     flexDirection: "column",
                                     alignItems: isMine ? "flex-end" : "flex-start",
-                                    maxWidth: 500,
-                                    marginBottom: "0.5rem"
+                                    marginBottom: "0.5rem",
+                                    maxWidth: "100%",
                                 }}
                             >
-                                                <span style={{fontSize: "0.75rem", color: "#ccc", marginBottom: 4}}>
-                                                    {isMine ? "Вы:" : "Собеседник:"}
-                                                </span>
-                                <div style={{
-                                    background: "white",
-                                    color: "black",
-                                    padding: "0.5rem 1rem",
-                                    borderRadius: "12px",
-                                    wordBreak: "break-word"
-                                }}>
+    <span style={{fontSize: "0.75rem", color: "#ccc", marginBottom: 4}}>
+      {isMine ? "Вы:" : "Собеседник:"}
+    </span>
+                                <div
+                                    style={{
+                                        background: isMine ? "#ffffff" : "#dddddd",
+                                        color: "#000",
+                                        padding: "0.5rem 1rem",
+                                        borderRadius: "12px",
+                                        wordBreak: "break-word",
+                                        maxWidth: "70%",
+                                    }}
+                                >
                                     {text}
                                 </div>
                             </div>);
+
                         })}
                         <div ref={endRef}/>
                     </>)}
