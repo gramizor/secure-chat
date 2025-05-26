@@ -70,11 +70,10 @@ const ChatPage = () => {
                         clearPinTimer();
                         clearPending(msg.from);
 
-                        const remoteUuid = msg.uuid ?? msg.from;
-                        const alreadySaved = await connectionExists(remoteUuid);
+                        const alreadySaved = await connectionExists(msg.from);
                         if (!alreadySaved) {
                             const name = prompt("Введите имя чата") ?? "Без имени";
-                            saveConnectionHistory(remoteUuid, name);
+                            saveConnectionHistory(msg.from, name);
                             loadChatHistory()
                         }
                     });

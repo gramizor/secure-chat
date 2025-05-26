@@ -4,6 +4,7 @@ const server = http.createServer();
 const wss = new WebSocketServer({ server });
 const clients = new Map();
 const pinToClientId = new Map();
+const pendingOffers = new Map();
 console.log('🧠 Инициализация WebSocket-сервера...');
 wss.on('connection', (ws, req) => {
     let clientId = '';
@@ -25,6 +26,16 @@ wss.on('connection', (ws, req) => {
                 clientUUID = msg.uuid;
                 clients.set(clientId, ws);
                 console.log(`✅ Клиент зарегистрирован: ${clientId}`);
+                if (pendingOffers.has(clientId)) {
+                    for (const offer of pendingOffers.get(clientId)) {
+                        ws.send(JSON.stringify({
+                            type: 'offer',
+                            from: offer.from,
+                            data: { sdp: offer.sdp }
+                        }));
+                    }
+                    pendingOffers.delete(clientId);
+                }
                 if (msg.pin) {
                     pinToClientId.set(msg.pin, {
                         clientId,
@@ -50,7 +61,19 @@ wss.on('connection', (ws, req) => {
             }
             const target = clients.get(targetClientId);
             if (target) {
-                target.send(JSON.stringify(msg));
+                if (msg.type === 'offer') {
+                    if (!clients.has(targetClientId)) {
+                        if (!pendingOffers.has(targetClientId))
+                            pendingOffers.set(targetClientId, []);
+                        pendingOffers.get(targetClientId).push({ from: msg.from, sdp: msg.data.sdp });
+                        console.log(`💾 offer сохранён в pending для ${targetClientId}`);
+                        return;
+                    }
+                }
+                target.send(JSON.stringify({
+                    ...msg,
+                    uuid: pinToClientId.get(msg.to)?.uuid ?? msg.to // добавим uuid
+                }));
                 console.log(`📤 Отправлено сообщение типа ${msg.type} → ${targetClientId}`);
             }
             else {
