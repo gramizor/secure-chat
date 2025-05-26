@@ -13,7 +13,7 @@ interface StartAsJoinParams {
     setStatus: (status: "idle" | "connecting" | "connected") => void;
     setMode: (mode: "idle" | "host" | "join") => void;
     setLog: (logs: string[]) => void;
-    addLog: (msg: string) => void;
+    addLog: (msg: string, system: boolean) => void;
     clearPinTimer: () => void;
     loadChatHistory: () => void;
 }
@@ -34,20 +34,20 @@ export const useStartAsJoin = ({
                                }: StartAsJoinParams) => {
     return useCallback(() => {
         if (wsRef.current) {
-            addLog("[useStartAsJoin] WebSocket уже существует — пропуск");
+            addLog("[useStartAsJoin] WebSocket уже существует — пропуск", true);
             return;
         }
 
-        addLog(`[useStartAsJoin] WebSocket создаётся`);
+        addLog(`[useStartAsJoin] WebSocket создаётся`, true);
 
         const ws = new WebSocketClient(uuid, pin);
         wsRef.current = ws;
 
         ws.onOpen(() => {
-            addLog("[useStartAsJoin] соединение установлено");
+            addLog("[useStartAsJoin] соединение установлено", true);
 
             ws.send({type: "join", from: uuid, uuid, pin});
-            addLog("[useStartAsJoin] join отправлен");
+            addLog("[useStartAsJoin] join отправлен", true);
         });
 
         ws.onMessage((msg: any) => {

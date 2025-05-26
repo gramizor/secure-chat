@@ -13,6 +13,10 @@ import {getOrGenerateUUID} from "@shared/lib/generateUUID.ts";
 import {WebSocketClient} from "@shared/api/WebSocketClient.ts";
 import {RTCPeer} from "@shared/api/RTCPeer.ts";
 import {handleMessage} from "@shared/lib/handleMessage.ts";
+import {generatePin} from "@shared/lib/generatePin.ts";
+import {resetConnection} from "@shared/lib/resetConnection.ts";
+import {CustomInput} from "@shared/ui/Input/Input.tsx";
+import {CustomButton} from "@shared/ui/Button/Button.tsx";
 
 export const EntryPage = () => {
     const [input, setInput] = useState<string>("");
@@ -22,22 +26,38 @@ export const EntryPage = () => {
     const [chatHistory, setChatHistory] = useState<{ uuid: string, chatName: string }[]>([]);
     const [connectedPeerId, setConnectedPeerId] = useState<string | null>(null);
 
-    const {log, addLog, setLog} = useChatLogs();
-    const {pin, clearPinTimer} = usePinTimer(mode);
-    const uuid = useMemo(() => getOrGenerateUUID(), []);
+    const endRef = useRef<HTMLDivElement | null>(null);
     const wsRef = useRef<WebSocketClient | null>(null);
     const peer = useRef<RTCPeer | null>(null);
+    const isReconnecting = useRef(false);
 
+    const {log, addLog, setLog} = useChatLogs();
+    const {pin, setPin, clearPinTimer} = usePinTimer(mode);
+    const uuid = useMemo(() => getOrGenerateUUID(), []);
     const loadChatHistory = useChatHistory(setChatHistory);
     const send = useSendMessage(peer, addLog);
-    const startAsHost = useStartAsHost({wsRef, peerRef: peer, targetId, setStatus, addLog});
+    const startAsHost = useStartAsHost({wsRef, peerRef: peer, targetId, setStatus, addLog, isReconnecting});
+
+    const reconnect = useReconnect({
+        uuid,
+        wsRef,
+        peer,
+        status,
+        connectedPeerId,
+        setConnectedPeerId,
+        setStatus,
+        setMode,
+        addLog,
+        setLog,
+        isReconnecting
+    });
 
     useEffect(() => {
         if (wsRef.current || status === 'connected') return;
 
         const ws = new WebSocketClient(uuid, mode === 'join' ? pin : undefined);
         wsRef.current = ws;
-        console.log('[EntryPage] WebSocket создан:', { uuid, pin, mode });
+        console.log('[EntryPage] WebSocket создан:', {uuid, pin, mode});
 
         ws.onMessage(async (msg) => {
             handleMessage({
@@ -64,19 +84,21 @@ export const EntryPage = () => {
         };
     }, [mode, uuid]);
 
+    useEffect(() => {
+        endRef.current?.scrollIntoView({behavior: 'smooth'});
+    }, [log]);
 
-    const reconnect = useReconnect({
-        uuid,
-        wsRef,
-        peer,
-        status,
-        connectedPeerId,
-        setConnectedPeerId,
-        setStatus,
-        setMode,
-        addLog,
-        setLog,
-    });
+    useEffect(() => {
+        if (mode !== 'join') return;
+        isReconnecting.current = false
+        const interval = setInterval(() => {
+            const newPin = generatePin();
+            setPin(newPin);
+            console.log('[PIN] Обновлён:', newPin);
+        }, 60000);
+        return () => clearInterval(interval);
+    }, [mode]);
+
 
     useEffect(() => {
         loadChatHistory();
@@ -85,20 +107,14 @@ export const EntryPage = () => {
     return (
         <Layout
             header={
-                <Header
-                    peer={peer}
-                    wsRef={wsRef}
-                    setConnectedPeerId={setConnectedPeerId}
-                    setStatus={setStatus}
-                    setLog={setLog}
-                    setMode={setMode}
-                />
+                <Header/>
             }
             sidebar={
                 <Sidebar
                     chatHistory={chatHistory}
                     setMode={setMode}
                     reconnect={reconnect}
+                    connectedPeerId={connectedPeerId}
                     onDeleteAll={() => {
                         indexedDB.deleteDatabase("chatHistory");
                         localStorage.removeItem("my-app-uuid");
@@ -109,19 +125,13 @@ export const EntryPage = () => {
                         setLog([]);
                     }}
                     onFinishChat={() => {
-                        wsRef.current?.send({type: "disconnect", to: connectedPeerId});
-                        peer.current?.close();
-                        wsRef.current?.close(1000, "Завершение чата");
-                        setConnectedPeerId(null);
-                        setStatus("idle");
-                        setMode("idle");
-                        setLog([]);
+                        resetConnection(wsRef, peer, setConnectedPeerId, setStatus, setMode, setLog);
                     }}
                 />
             }
             main={
                 <div style={{display: "flex", flexDirection: "column", flex: 1, height: "100%"}}>
-                    {mode === "join" && (
+                    {mode === "join" && !isReconnecting.current && (
                         <div style={{
                             backgroundColor: '#330000',
                             padding: '1rem',
@@ -136,11 +146,12 @@ export const EntryPage = () => {
                                 letterSpacing: '0.1em',
                                 margin: '0.5rem 0'
                             }}>{pin}</h2>
-                            <button onClick={() => navigator.clipboard.writeText(pin)}>📋 Скопировать</button>
+                            <CustomButton onClick={() => navigator.clipboard.writeText(pin)}>📋
+                                Скопировать</CustomButton>
                         </div>
                     )}
 
-                    {mode === "host" && (
+                    {mode === "host" && !isReconnecting.current && (
                         <div style={{
                             backgroundColor: '#330000',
                             padding: '1rem',
@@ -148,19 +159,20 @@ export const EntryPage = () => {
                             marginBottom: '1rem'
                         }}>
                             <p>Вставь UUID друга:</p>
-                            <input
+                            <CustomInput
                                 value={targetId}
-                                onChange={(e) => setTargetId(e.target.value)}
-                                placeholder="UUID"
-                                style={{width: '100%', padding: '0.5rem', borderRadius: '8px'}}
+                                onChange={setTargetId} // ✅ просто передаёшь setTargetId напрямую
+                                placeholder="UUID подключающегося"
+                                style={{width: '100%'}}
+                                rows={1}
                             />
-                            <button
+                            <CustomButton
                                 style={{marginTop: '1rem'}}
                                 onClick={startAsHost}
                                 disabled={!targetId.trim()}
                             >
                                 🚀 Начать соединение
-                            </button>
+                            </CustomButton>
                         </div>
                     )}
 
@@ -183,38 +195,65 @@ export const EntryPage = () => {
                         >
                             {log.map((entry, i) => {
                                 const isMine = entry.startsWith("🧍");
+                                const text = isMine ? entry.slice(2) : entry;
+
                                 return (
                                     <div
                                         key={i}
                                         style={{
-                                            background: "white",
-                                            color: "black",
-                                            padding: "0.5rem 1rem",
-                                            borderRadius: "12px",
-                                            marginBottom: "0.5rem",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            alignItems: isMine ? "flex-end" : "flex-start",
                                             maxWidth: 500,
-                                            alignSelf: isMine ? "flex-end" : "flex-start",
-                                            wordBreak: "break-word",
+                                            marginBottom: "0.5rem",
                                         }}
                                     >
-                                        {entry}
+            <span
+                style={{
+                    fontSize: "0.75rem",
+                    color: "#ccc",
+                    marginBottom: 4,
+                }}
+            >
+                {isMine ? "Вы:" : "Собеседник:"}
+            </span>
+                                        <div
+                                            style={{
+                                                background: "white",
+                                                color: "black",
+                                                padding: "0.5rem 1rem",
+                                                borderRadius: "12px",
+                                                wordBreak: "break-word",
+                                            }}
+                                        >
+                                            {text}
+                                        </div>
                                     </div>
                                 );
                             })}
+
+                            <div ref={endRef}/>
                         </div>
                     </div>
 
-                    <div style={{marginTop: "1rem"}}>
-                        <input
+                    <div style={{display: "flex", gap: 8, marginTop: '1rem'}}>
+                        <CustomInput
                             value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && send(input, status, () => setInput(""))}
-                            placeholder="Введите сообщение..."
-                            style={{padding: '0.5rem', borderRadius: '8px', width: '100%'}}
+                            onChange={setInput}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    send(input, status, () => setInput(""));
+                                }
+                            }}
+                            disabled={status !== "connected"}
                         />
-                        <button onClick={() => send(input, status, () => setInput(""))} style={{marginTop: '0.5rem'}}>
+                        <CustomButton
+                            onClick={() => send(input, status, () => setInput(""))}
+                            disabled={status !== "connected"}
+                        >
                             Отправить
-                        </button>
+                        </CustomButton>
                     </div>
                 </div>
             }

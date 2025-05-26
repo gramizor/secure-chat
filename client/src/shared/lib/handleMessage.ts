@@ -13,7 +13,7 @@ interface HandleMessageParams {
     setStatus: (s: 'idle' | 'connecting' | 'connected') => void;
     setMode: (m: 'idle' | 'host' | 'join') => void;
     setLog: (logs: string[]) => void;
-    addLog: (txt: string) => void;
+    addLog: (txt: string, system: boolean) => void;
     clearPinTimer: () => void;
     loadChatHistory: () => void;
 }
@@ -28,22 +28,22 @@ export const handleMessage = ({
             if (status === "connected" || peer.current || wsRef.current?.getSocketReadyState() !== 1) {
                 if (msg.from !== selfId) {
                     addPending(msg.from);
-                    addLog(`📥 уже есть соединение, входящий offer от ${msg.from} сохранён в pending`);
+                    addLog(`📥 уже есть соединение, входящий offer от ${msg.from} сохранён в pending`, true);
                 } else {
-                    addLog(`⚠️ повторный offer от текущего peer ${msg.from} — игнор`);
+                    addLog(`⚠️ повторный offer от текущего peer ${msg.from} — игнор`, true);
                 }
                 return;
             }
 
-            addLog(`📩 offer от ${msg.from}`);
+            addLog(`📩 offer от ${msg.from}`, true);
             peer.current = new RTCPeer(false);
-            addLog("[RTC] создан peer (receiver)");
+            addLog("[RTC] создан peer (receiver)", true);
 
-            peer.current.onMessage((m) => addLog(`👤 ${m}`));
+            peer.current.onMessage((m) => addLog(`${m}`, false));
             peer.current.onOpen(async () => {
                 setConnectedPeerId(msg.from);
                 setStatus("connected");
-                addLog("🔗 канал открыт");
+                addLog("🔗 канал открыт", true);
                 clearPinTimer();
                 clearPending(msg.from);
 
@@ -60,7 +60,7 @@ export const handleMessage = ({
             );
 
             peer.current.onClose?.(() => {
-                addLog("🚫 соединение прервано — по ошибке канала");
+                addLog("🚫 соединение прервано — по ошибке канала", true);
                 peer.current?.close();
                 wsRef.current?.close(1000, "datachannel error");
                 wsRef.current = null;
@@ -78,9 +78,9 @@ export const handleMessage = ({
         }
 
         case "answer": {
-            addLog(`📩 answer от ${msg.from}`);
+            addLog(`📩 answer от ${msg.from}`, true);
             peer.current?.acceptAnswer(msg.data.sdp, msg.data.publicKey);
-            addLog("[RTC] answer принят (host)");
+            addLog("[RTC] answer принят (host)", true);
 
             connectionExists(msg.from).then((exists) => {
                 if (!exists) {
@@ -93,13 +93,13 @@ export const handleMessage = ({
 
         case "ice-candidate": {
             peer.current?.addIceCandidate(msg.data.candidate).then(() => {
-                addLog("[ICE] кандидат добавлен");
+                addLog("[ICE] кандидат добавлен", true);
             });
             break;
         }
 
         case "disconnect": {
-            addLog(`🔌 собеседник завершил соединение`);
+            addLog(`🔌 собеседник завершил соединение`, true);
             peer.current?.close();
             peer.current = null;
             wsRef.current?.close(1000, "disconnect");

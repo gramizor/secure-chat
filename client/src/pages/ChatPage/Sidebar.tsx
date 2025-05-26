@@ -1,4 +1,5 @@
-import {isPending} from "@shared/lib/pendingManager";
+import { isPending } from "@shared/lib/pendingManager";
+import {CustomButton} from "@shared/ui/Button/Button.tsx";
 
 interface Chat {
     uuid: string;
@@ -11,6 +12,7 @@ interface Props {
     reconnect: (uuid: string) => void;
     onDeleteAll: () => void;
     onFinishChat: () => void;
+    connectedPeerId: string | null;
 }
 
 export const Sidebar = ({
@@ -19,6 +21,7 @@ export const Sidebar = ({
                             reconnect,
                             onDeleteAll,
                             onFinishChat,
+                            connectedPeerId
                         }: Props) => {
     return (
         <aside
@@ -34,23 +37,23 @@ export const Sidebar = ({
             }}
         >
             {/* Верхние кнопки */}
-            <div style={{display: "flex", flexDirection: "column", gap: "0.5rem"}}>
-                <button
-                    style={{backgroundColor: "#660000", color: "white", padding: "0.5rem"}}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <CustomButton
+                    style={{ backgroundColor: "#660000", color: "white", padding: "0.5rem" }}
                     onClick={() => setMode("host")}
                 >
                     🔗 Создать соединение
-                </button>
-                <button
-                    style={{backgroundColor: "#660000", color: "white", padding: "0.5rem"}}
+                </CustomButton>
+                <CustomButton
+                    style={{ backgroundColor: "#660000", color: "white", padding: "0.5rem" }}
                     onClick={() => setMode("join")}
                 >
                     🔌 Подключиться по PIN
-                </button>
+                </CustomButton>
             </div>
 
-            {/* История чатов с прокруткой */}
-            <div style={{flex: 1, overflowY: "auto", margin: "1rem 0"}}>
+            {/* История чатов */}
+            <div style={{ flex: 1, overflowY: "auto", margin: "1rem 0" }}>
                 <h3>История чатов</h3>
                 <ul
                     style={{
@@ -62,38 +65,43 @@ export const Sidebar = ({
                         gap: "0.25rem",
                     }}
                 >
-                    {chatHistory.map((chat) => (
-                        <li
-                            key={chat.uuid}
-                            style={{
-                                backgroundColor: "#800000",
-                                padding: "0.5rem",
-                                borderRadius: "0.5rem",
-                            }}
-                        >
-                            <button
-                                disabled={isPending(chat.uuid)}
+                    {chatHistory.map((chat) => {
+                        const pending = isPending(chat.uuid);
+                        const isDisabled = pending || connectedPeerId === chat.uuid;
+
+                        return (
+                            <li
+                                key={chat.uuid}
                                 style={{
-                                    width: "100%",
-                                    backgroundColor: isPending(chat.uuid) ? "#4a0000" : "#990000",
-                                    color: "white",
+                                    backgroundColor: "#800000",
                                     padding: "0.5rem",
-                                    borderRadius: "6px",
-                                    cursor: isPending(chat.uuid) ? "not-allowed" : "pointer",
+                                    borderRadius: "0.5rem",
                                 }}
-                                onClick={() => reconnect(chat.uuid)}
-                                title={isPending(chat.uuid) ? "Соединение активно" : undefined}
                             >
-                                {chat.chatName} {isPending(chat.uuid) ? "✅" : ""}
-                            </button>
-                        </li>
-                    ))}
+                                <CustomButton
+                                    disabled={isDisabled}
+                                    style={{
+                                        width: "100%",
+                                        backgroundColor: pending ? "#4a0000" : "#990000",
+                                        color: "white",
+                                        padding: "0.5rem",
+                                        borderRadius: "6px",
+                                        cursor: isDisabled ? "not-allowed" : "pointer",
+                                    }}
+                                    onClick={() => reconnect(chat.uuid)}
+                                    title={pending ? "Ожидает ответа" : undefined}
+                                >
+                                    {chat.chatName} {pending ? "❗" : ""}
+                                </CustomButton>
+                            </li>
+                        );
+                    })}
                 </ul>
             </div>
 
             {/* Нижние кнопки */}
-            <div style={{display: "flex", flexDirection: "column", gap: "0.5rem"}}>
-                <button
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <CustomButton
                     style={{
                         backgroundColor: "#990000",
                         color: "white",
@@ -104,9 +112,9 @@ export const Sidebar = ({
                     onClick={onDeleteAll}
                 >
                     🧨 Удалить все соединения и UUID
-                </button>
+                </CustomButton>
 
-                <button
+                <CustomButton
                     style={{
                         backgroundColor: "#990000",
                         color: "white",
@@ -117,7 +125,7 @@ export const Sidebar = ({
                     onClick={onFinishChat}
                 >
                     🔌 Завершить чат
-                </button>
+                </CustomButton>
             </div>
         </aside>
     );

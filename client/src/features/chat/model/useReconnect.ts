@@ -14,6 +14,7 @@ export const useReconnect = ({
                                  setMode,
                                  addLog,
                                  setLog,
+                                 isReconnecting
                              }: {
     uuid: string;
     wsRef: React.MutableRefObject<WebSocketClient | null>;
@@ -23,8 +24,9 @@ export const useReconnect = ({
     setConnectedPeerId: (id: string | null) => void;
     setStatus: (status: "idle" | "connecting" | "connected") => void;
     setMode: (mode: "idle" | "host" | "join") => void;
-    addLog: (msg: string) => void;
+    addLog: (msg: string, system: boolean) => void;
     setLog: (logs: string[]) => void;
+    isReconnecting: React.RefObject<boolean>
 }) => {
     return useCallback(
         async (peerUuid: string) => {
@@ -36,7 +38,7 @@ export const useReconnect = ({
 
                 if (connectedPeerId) {
                     wsRef.current?.send({type: "disconnect", to: connectedPeerId});
-                    addLog(`📤 отправлен disconnect для ${connectedPeerId}`);
+                    addLog(`📤 отправлен disconnect для ${connectedPeerId}`, true);
                 }
 
                 peer.current?.close();
@@ -46,10 +48,10 @@ export const useReconnect = ({
                 setConnectedPeerId(null);
                 setStatus("idle");
             }
-
+            isReconnecting.current = true;
             setMode("host");
             setStatus("connecting");
-            addLog(`🔁 подключение к ${peerUuid.slice(0, 6)}`);
+            addLog(`🔁 подключение к ${peerUuid.slice(0, 6)}`, true);
 
             const ws = new WebSocketClient(uuid);
             wsRef.current = ws;
@@ -60,12 +62,12 @@ export const useReconnect = ({
                 const rtc = new RTCPeer(true);
                 peer.current = rtc;
 
-                rtc.onMessage((m) => addLog(`👤 ${m}`));
+                rtc.onMessage((m) => addLog(`${m}`, false));
                 rtc.onOpen(() => {
                     clearTimeout(timeoutId);
                     setStatus("connected");
                     setConnectedPeerId(peerUuid);
-                    addLog("🔗 канал открыт");
+                    addLog("🔗 канал открыт", true);
                     clearPending(peerUuid);
                 });
                 rtc.onIceCandidate((c) => {
@@ -74,10 +76,10 @@ export const useReconnect = ({
 
                 const {sdp, publicKey} = await rtc.createOffer();
                 ws.send({type: "offer", to: peerUuid, data: {sdp, publicKey}});
-                addLog("⏳ offer отправлен — ждём ответ 6 сек...");
+                addLog("⏳ offer отправлен — ждём ответ 6 сек...", true);
 
                 timeoutId = setTimeout(() => {
-                    addLog("⌛ истекло время ожидания ответа — отмена подключения");
+                    addLog("⌛ истекло время ожидания ответа — отмена подключения", true);
                     peer.current?.close();
                     peer.current = null;
                     wsRef.current?.close(1000, "обнуляем после простоя");
